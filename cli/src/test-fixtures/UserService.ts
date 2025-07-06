@@ -1,15 +1,21 @@
 export class UserService {
-  @ExposeToRenderer("userAPI")
+  /**
+   * @decorator expose userAPI
+   */
   async getUser(id: number): Promise<User> {
     return { id, name: "Test User" } as User
   }
 
-  @ExposeToRenderer("userAPI")
+  /**
+   * @decorator expose userAPI
+   */
   async createUser(name: string, email: string): Promise<User> {
     return { id: 1, name, email } as User
   }
 
-  @ExposeToRenderer()
+  /**
+   * @decorator expose
+   */
   async getCurrentUser(): Promise<User | null> {
     return null
   }

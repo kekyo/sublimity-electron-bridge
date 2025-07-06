@@ -1,4 +1,6 @@
-@ExposeToRenderer("systemAPI")
+/**
+ * @decorator expose systemAPI
+ */
 export async function getSystemInfo(): Promise<SystemInfo> {
   return {
     platform: process.platform,
@@ -7,12 +9,16 @@ export async function getSystemInfo(): Promise<SystemInfo> {
   }
 }
 
-@ExposeToRenderer("systemAPI")
+/**
+ * @decorator expose systemAPI
+ */
 export async function getMemoryUsage(): Promise<NodeJS.MemoryUsage> {
   return process.memoryUsage()
 }
 
-@ExposeToRenderer()
+/**
+ * @decorator expose
+ */
 export async function getUptime(): Promise<number> {
   return process.uptime()
 }

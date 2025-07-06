@@ -42,32 +42,27 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
       
       node.members.forEach(member => {
         if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
-          const decorators = member.modifiers?.filter(ts.isDecorator)
-          if (decorators && decorators.length > 0) {
-            decorators.forEach((decorator: ts.Decorator) => {
-              const exposedMethod = processDecorator(decorator, sourceFile, filePath, (member.name as ts.Identifier).text, className)
-              if (exposedMethod) {
-                const parameters = member.parameters.map(param => ({
-                  name: (param.name as ts.Identifier).text,
-                  type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
-                }))
-                
-                const returnType = member.type ? sourceFile.text.substring(member.type.pos, member.type.end).trim() : 'Promise<any>'
-                
-                // Check if method returns Promise
-                if (member.type && !isPromiseType(member.type)) {
-                  throw new Error(`ExposeToRenderer method must return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
-                }
-                
-                methods.push({
-                  className,
-                  methodName: (member.name as ts.Identifier).text,
-                  namespace: exposedMethod.namespace,
-                  parameters,
-                  returnType,
-                  filePath
-                })
-              }
+          const exposedMethod = processJSDocTag(member, sourceFile, filePath, (member.name as ts.Identifier).text, className)
+          if (exposedMethod) {
+            const parameters = member.parameters.map(param => ({
+              name: (param.name as ts.Identifier).text,
+              type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
+            }))
+            
+            const returnType = member.type ? sourceFile.text.substring(member.type.pos, member.type.end).trim() : 'Promise<any>'
+            
+            // Check if method returns Promise
+            if (member.type && !isPromiseType(member.type)) {
+              throw new Error(`@decorator expose method must return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
+            }
+            
+            methods.push({
+              className,
+              methodName: (member.name as ts.Identifier).text,
+              namespace: exposedMethod.namespace,
+              parameters,
+              returnType,
+              filePath
             })
           }
         }
@@ -76,33 +71,62 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
     
     // Handle function declarations
     if (ts.isFunctionDeclaration(node) && node.name) {
-      const decorators = node.modifiers?.filter(ts.isDecorator)
-      if (decorators && decorators.length > 0) {
-        decorators.forEach((decorator: ts.Decorator) => {
-          const exposedMethod = processDecorator(decorator, sourceFile, filePath, node.name!.text)
+      const exposedMethod = processJSDocTag(node, sourceFile, filePath, node.name.text)
+      if (exposedMethod) {
+        const parameters = node.parameters.map(param => ({
+          name: (param.name as ts.Identifier).text,
+          type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
+        }))
+        
+        const returnType = node.type ? sourceFile.text.substring(node.type.pos, node.type.end).trim() : 'Promise<any>'
+        
+        // Check if function returns Promise
+        if (node.type && !isPromiseType(node.type)) {
+          throw new Error(`@decorator expose function must return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`)
+        }
+        
+        methods.push({
+          methodName: node.name.text,
+          namespace: exposedMethod.namespace,
+          parameters,
+          returnType,
+          filePath
+        })
+      }
+    }
+    
+    // Handle variable declarations with arrow functions
+    if (ts.isVariableStatement(node)) {
+      node.declarationList.declarations.forEach(declaration => {
+        if (ts.isVariableDeclaration(declaration) && 
+            declaration.name && ts.isIdentifier(declaration.name) &&
+            declaration.initializer && ts.isArrowFunction(declaration.initializer)) {
+          
+          const exposedMethod = processJSDocTag(node, sourceFile, filePath, declaration.name.text)
           if (exposedMethod) {
-            const parameters = node.parameters.map(param => ({
+            const arrowFunc = declaration.initializer
+            const parameters = arrowFunc.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
               type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
             }))
             
-            const returnType = node.type ? sourceFile.text.substring(node.type.pos, node.type.end).trim() : 'Promise<any>'
+            const returnType = arrowFunc.type ? sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() : 'Promise<any>'
             
-            // Check if function returns Promise
-            if (node.type && !isPromiseType(node.type)) {
-              throw new Error(`ExposeToRenderer function must return Promise: ${node.name!.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`)
+            // Check if arrow function returns Promise
+            if (arrowFunc.type && !isPromiseType(arrowFunc.type)) {
+              throw new Error(`@decorator expose function must return Promise: ${declaration.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, declaration.pos).line + 1}`)
             }
             
             methods.push({
-              methodName: node.name!.text,
+              methodName: declaration.name.text,
               namespace: exposedMethod.namespace,
               parameters,
               returnType,
               filePath
             })
           }
-        })
-      }
+        }
+      })
     }
     
     ts.forEachChild(node, visit)
@@ -112,27 +136,28 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
   return methods
 }
 
-function processDecorator(decorator: ts.Decorator, sourceFile: ts.SourceFile, filePath: string, methodName: string, className?: string): { namespace: string } | null {
-  if (ts.isCallExpression(decorator.expression)) {
-    const expression = decorator.expression
-    if (ts.isIdentifier(expression.expression) && 
-        expression.expression.text === 'ExposeToRenderer') {
+function processJSDocTag(node: ts.Node, sourceFile: ts.SourceFile, filePath: string, methodName: string, className?: string): { namespace: string } | null {
+  const jsDocTags = ts.getJSDocTags(node)
+  
+  for (const tag of jsDocTags) {
+    if (tag.tagName && tag.tagName.text === 'decorator' && tag.comment) {
+      const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text || '').join('')
+      const match = comment.match(/^expose\s+(\w+)$/)
       
-      let namespace = 'electronAPI'
-      if (expression.arguments.length > 0) {
-        const arg = expression.arguments[0]
-        if (ts.isStringLiteral(arg)) {
-          namespace = arg.text
-          if (!isCamelCase(namespace)) {
-            const location = className ? `${className}.${methodName}` : methodName
-            throw new Error(`ExposeToRenderer argument must be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, arg.pos).line + 1}`)
-          }
+      if (match) {
+        const namespace = match[1]
+        if (!isCamelCase(namespace)) {
+          const location = className ? `${className}.${methodName}` : methodName
+          throw new Error(`@decorator expose argument must be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`)
         }
+        return { namespace }
+      } else if (comment === 'expose') {
+        // Default namespace when no argument provided
+        return { namespace: 'electronAPI' }
       }
-      
-      return { namespace }
     }
   }
+  
   return null
 }
 
@@ -161,16 +186,25 @@ function groupMethodsByNamespace(methods: ExposedMethod[]): NamespaceGroup {
 
 function generateMainHandlers(namespaceGroups: NamespaceGroup): string {
   const imports = new Set<string>()
+  const singletonInstances = new Set<string>()
   const handlers: string[] = []
   
-  // Generate imports
+  // Generate imports and collect unique class names
   for (const methods of Object.values(namespaceGroups)) {
     for (const method of methods) {
       if (method.className) {
         const importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/')
         imports.add(`import { ${method.className} } from '${importPath}'`)
+        singletonInstances.add(method.className)
       }
     }
+  }
+  
+  // Generate singleton instance declarations
+  const instanceDeclarations: string[] = []
+  for (const className of Array.from(singletonInstances)) {
+    const instanceVar = `${className.toLowerCase()}Instance`
+    instanceDeclarations.push(`const ${instanceVar} = new ${className}()`)
   }
   
   // Generate handler registrations
@@ -182,7 +216,6 @@ function generateMainHandlers(namespaceGroups: NamespaceGroup): string {
         const params = method.parameters.map(p => p.name).join(', ')
         const args = method.parameters.length > 0 ? `, ${params}` : ''
         
-        handlers.push(`const ${instanceVar} = new ${method.className}()`)
         handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${instanceVar}.${method.methodName}(${params}))`)
       } else {
         // Standalone function
@@ -201,6 +234,10 @@ function generateMainHandlers(namespaceGroups: NamespaceGroup): string {
     "import { ipcMain } from 'electron'",
     ...Array.from(imports),
     '',
+    '// Create singleton instances',
+    ...instanceDeclarations,
+    '',
+    '// Register IPC handlers',
     ...handlers
   ].join('\n')
 }

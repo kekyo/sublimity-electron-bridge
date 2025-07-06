@@ -51,20 +51,24 @@ describe('ElectronBridgeCore', () => {
   })
 
   describe('Method Extraction', () => {
-    it('should extract methods with @ExposeToRenderer decorator from classes', () => {
+    it('should extract methods with @decorator expose JSDoc tag from classes', () => {
       const sourceCode = `
         export class FileService {
-          @ExposeToRenderer("fileAPI")
+          /**
+           * @decorator expose fileAPI
+           */
           async readFile(path: string): Promise<string> {
             return "content"
           }
           
-          @ExposeToRenderer()
+          /**
+           * @decorator expose
+           */
           async writeFile(path: string, content: string): Promise<void> {
             // implementation
           }
           
-          // Method without decorator should be ignored
+          // Method without JSDoc tag should be ignored
           private helperMethod(): void {}
         }
       `
@@ -100,19 +104,23 @@ describe('ElectronBridgeCore', () => {
       })
     })
 
-    it('should extract standalone functions with @ExposeToRenderer decorator', () => {
+    it('should extract standalone functions with @decorator expose JSDoc tag', () => {
       const sourceCode = `
-        @ExposeToRenderer("databaseAPI")
+        /**
+         * @decorator expose databaseAPI
+         */
         async function queryDatabase(sql: string): Promise<any[]> {
           return []
         }
         
-        @ExposeToRenderer()
+        /**
+         * @decorator expose
+         */
         async function getVersion(): Promise<string> {
           return "1.0.0"
         }
         
-        // Function without decorator should be ignored
+        // Function without JSDoc tag should be ignored
         function helperFunction(): void {}
       `
       
@@ -145,13 +153,17 @@ describe('ElectronBridgeCore', () => {
     it('should handle mixed class methods and standalone functions', () => {
       const sourceCode = `
         export class UserService {
-          @ExposeToRenderer("userAPI")
+          /**
+           * @decorator expose userAPI
+           */
           async getUser(id: number): Promise<User> {
             return {} as User
           }
         }
         
-        @ExposeToRenderer("systemAPI")
+        /**
+         * @decorator expose systemAPI
+         */
         async function getSystemInfo(): Promise<SystemInfo> {
           return {} as SystemInfo
         }
@@ -170,13 +182,58 @@ describe('ElectronBridgeCore', () => {
       expect(methods[0].className).toBe('UserService')
       expect(methods[1].className).toBeUndefined()
     })
+
+    it('should extract arrow functions with variable binding', () => {
+      const sourceCode = `
+        /**
+         * @decorator expose utilsAPI
+         */
+        const getSystemInfo = async (): Promise<SystemInfo> => {
+          return {} as SystemInfo
+        }
+        
+        /**
+         * @decorator expose
+         */
+        export const processData = async (data: string): Promise<string> => {
+          return data.toUpperCase()
+        }
+      `
+      
+      const sourceFile = ts.createSourceFile(
+        'test.ts',
+        sourceCode,
+        ts.ScriptTarget.Latest,
+        true
+      )
+      
+      const methods = extractExposedMethods(sourceFile, 'test.ts')
+      
+      expect(methods).toHaveLength(2)
+      
+      expect(methods[0]).toMatchObject({
+        methodName: 'getSystemInfo',
+        namespace: 'utilsAPI',
+        parameters: [],
+        returnType: 'Promise<SystemInfo>'
+      })
+      
+      expect(methods[1]).toMatchObject({
+        methodName: 'processData',
+        namespace: 'electronAPI',
+        parameters: [{ name: 'data', type: 'string' }],
+        returnType: 'Promise<string>'
+      })
+    })
   })
 
   describe('Validation', () => {
     it('should validate camelCase namespace arguments', () => {
       const sourceCode = `
         export class TestService {
-          @ExposeToRenderer("FileAPI") // PascalCase - should throw error
+          /**
+           * @decorator expose FileAPI
+           */
           async readFile(): Promise<string> {
             return ""
           }
@@ -192,13 +249,15 @@ describe('ElectronBridgeCore', () => {
       
       expect(() => {
         extractExposedMethods(sourceFile, 'test.ts')
-      }).toThrow('ExposeToRenderer argument must be camelCase: "FileAPI"')
+      }).toThrow('@decorator expose argument must be camelCase: "FileAPI"')
     })
 
     it('should validate Promise return types', () => {
       const sourceCode = `
         export class TestService {
-          @ExposeToRenderer()
+          /**
+           * @decorator expose
+           */
           readFileSync(): string { // Non-Promise return type - should throw error
             return ""
           }
@@ -214,7 +273,7 @@ describe('ElectronBridgeCore', () => {
       
       expect(() => {
         extractExposedMethods(sourceFile, 'test.ts')
-      }).toThrow('ExposeToRenderer method must return Promise')
+      }).toThrow('@decorator expose method must return Promise')
     })
   })
 })

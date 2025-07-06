@@ -1,21 +1,24 @@
-# Sublimity Electron Bridge
+# Sublimity Electron IPC Bridge
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm version](https://badge.fury.io/js/sublimity-electron-bridge-cli.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-cli)
-[![npm version](https://badge.fury.io/js/sublimity-electron-bridge-vite.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-vite)
+
+|Package|Link|
+|:----|:----|
+|npm CLI|[![npm CLI](https://badge.fury.io/js/sublimity-electron-bridge-cli.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-cli)|
+|npm Vite plugin|[![npm vite-plugin](https://badge.fury.io/js/sublimity-electron-bridge-vite.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-vite)|
 
 An automated code generation tool for Electron applications that eliminates the need for manual IPC (Inter-Process Communication) setup between the main process and renderer process. This tool analyzes TypeScript source code using the TypeScript Compiler API and automatically generates the necessary IPC handlers, preload bridge scripts, and type definitions.
 
 ## Overview
 
-Sublimity Electron Bridge targets Electron applications built with TypeScript. It automates the traditionally manual and error-prone process of setting up IPC communication by:
+Sublimity Electron IPC Bridge targets Electron applications built with TypeScript. It automates the traditionally manual and error-prone process of setting up IPC communication by:
 
-- **Analyzing** TypeScript source code for methods decorated with `@ExposeToRenderer`
+- **Analyzing** TypeScript source code for methods marked with `@decorator expose` JSDoc tags
 - **Generating** main process IPC handlers automatically
 - **Creating** preload bridge scripts for secure communication
 - **Providing** complete TypeScript type definitions for the renderer process
 
-The tool supports both class methods and standalone functions, with automatic validation of camelCase naming conventions and Promise return types.
+The tool supports class methods, standalone functions, and arrow functions with variable binding, with automatic validation of camelCase naming conventions and Promise return types.
 
 ### Generated Output Structure
 
@@ -140,13 +143,17 @@ interface SublimityElectronBridgeOptions {
 ```typescript
 // main/services/FileService.ts
 export class FileService {
-  @ExposeToRenderer("fileAPI")
+  /**
+   * @decorator expose fileAPI
+   */
   async readFile(path: string): Promise<string> {
     const fs = await import('fs/promises')
     return fs.readFile(path, 'utf-8')
   }
 
-  @ExposeToRenderer("fileAPI")
+  /**
+   * @decorator expose fileAPI
+   */
   async writeFile(path: string, content: string): Promise<void> {
     const fs = await import('fs/promises')
     await fs.writeFile(path, content, 'utf-8')
@@ -154,13 +161,23 @@ export class FileService {
 }
 
 // main/utils/system.ts
-@ExposeToRenderer("systemAPI")
+/**
+ * @decorator expose systemAPI
+ */
 export async function getSystemInfo(): Promise<SystemInfo> {
   return {
     platform: process.platform,
     version: process.version,
     arch: process.arch
   }
+}
+
+// main/utils/helpers.ts
+/**
+ * @decorator expose utilsAPI
+ */
+export const processData = async (data: string): Promise<string> => {
+  return data.toUpperCase()
 }
 ```
 
@@ -183,16 +200,20 @@ const systemInfo = await window.systemAPI.getSystemInfo()
 console.log(`Running on ${systemInfo.platform}`)
 ```
 
-## Decorator Syntax
+## JSDoc Syntax
 
-### Method Decoration
+### Class Method Decoration
 
 ```typescript
 class ServiceClass {
-  @ExposeToRenderer("customAPI")  // Custom namespace
+  /**
+   * @decorator expose customAPI
+   */
   async methodName(): Promise<ReturnType> { /* ... */ }
 
-  @ExposeToRenderer()            // Uses default namespace
+  /**
+   * @decorator expose
+   */
   async anotherMethod(): Promise<ReturnType> { /* ... */ }
 }
 ```
@@ -200,55 +221,35 @@ class ServiceClass {
 ### Function Decoration
 
 ```typescript
-@ExposeToRenderer("utilsAPI")
+/**
+ * @decorator expose utilsAPI
+ */
 async function utilityFunction(): Promise<ReturnType> { /* ... */ }
+```
+
+### Arrow Function Decoration
+
+```typescript
+/**
+ * @decorator expose utilsAPI
+ */
+const utilityFunction = async (): Promise<ReturnType> => {
+  /* ... */
+}
+
+/**
+ * @decorator expose customAPI
+ */
+export const processData = async (data: string): Promise<string> => {
+  return data.toUpperCase()
+}
 ```
 
 ### Validation Rules
 
 - **Namespace arguments** must be in camelCase format
-- **Methods and functions** must return Promise types
+- **Methods and functions** must return `Promise<T>` types
 - **Invalid naming** will result in build-time errors
-
-## Limitations
-
-### Arrow Functions with Variable Binding
-
-The tool **does not detect** arrow functions assigned to variables, as TypeScript decorators cannot be applied to variable declarations. This is a limitation of the TypeScript language specification, not the tool itself.
-
-**Not Supported (TypeScript Compilation Error):**
-
-```typescript
-// This will cause a TypeScript compilation error
-@ExposeToRenderer("utilsAPI")
-const getSystemInfo = async (): Promise<SystemInfo> => {
-  return { /* ... */ }
-}
-
-// This will also cause a compilation error
-@ExposeToRenderer("utilsAPI")
-export const getSystemInfo = async (): Promise<SystemInfo> => {
-  return { /* ... */ }
-}
-```
-
-**Use These Alternatives Instead:**
-
-```typescript
-// Function declaration - Fully supported
-@ExposeToRenderer("utilsAPI")
-export async function getSystemInfo(): Promise<SystemInfo> {
-  return { /* ... */ }
-}
-
-// Class method - Fully supported
-export class Utils {
-  @ExposeToRenderer("utilsAPI")
-  async getSystemInfo(): Promise<SystemInfo> {
-    return { /* ... */ }
-  }
-}
-```
 
 ## License
 
