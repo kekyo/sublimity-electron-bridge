@@ -1,30 +1,34 @@
 {
   "name": "@sublimity-electron-bridge/cli",
-  "version": "1.0.0",
+  "version": "0.0.4",
+  "description": "Electron bridge generator for automatic IPC setup",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kekyo/sublimity-electron-bridge.git"
+  },
+  "homepage": "https://github.com/kekyo/sublimity-electron-bridge#readme",
+  "keywords": [
+    "electron",
+    "ipc",
+    "bridge",
+    "automatic",
+    "cli"
+  ],
   "main": "dist/index.js",
   "bin": {
-    "electron-bridge": "dist/cli.js"
+    "seb": "dist/cli.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
-    "test": "vitest run",
-    "test:ui": "vitest --ui",
+    "build": "rv --npm --cwd . && vite build",
+    "dev": "rv --npm --cwd . && vite build --watch",
+    "test": "rv --npm --cwd . && vitest run",
+    "test:ui": "rv --npm --cwd . && vitest --ui",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "cli",
-    "electron",
-    "typescript",
-    "bridge"
-  ],
-  "author": "",
-  "license": "ISC",
-  "description": "CLI tool for Electron bridge generation",
   "dependencies": {
     "commander": "^11.1.0",
     "glob": "^10.3.10",

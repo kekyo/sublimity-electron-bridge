@@ -1,6 +1,20 @@
 {
   "name": "@sublimity-electron-bridge/vite-plugin",
-  "version": "1.0.0",
+  "version": "0.0.4",
+  "description": "Electron bridge generator for automatic IPC setup",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kekyo/sublimity-electron-bridge.git"
+  },
+  "homepage": "https://github.com/kekyo/sublimity-electron-bridge#readme",
+  "keywords": [
+    "electron",
+    "ipc",
+    "bridge",
+    "automatic",
+    "vite",
+    "plugin"
+  ],
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -8,22 +22,13 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
-    "test": "vitest run",
-    "test:ui": "vitest --ui",
+    "build": "rv --npm --cwd . && vite build",
+    "dev": "rv --npm --cwd . && vite build --watch",
+    "test": "rv --npm --cwd . && vitest run",
+    "test:ui": "rv --npm --cwd . && vitest --ui",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "vite",
-    "plugin",
-    "electron",
-    "typescript"
-  ],
-  "author": "",
-  "license": "ISC",
-  "description": "Vite plugin for Electron bridge generation",
   "dependencies": {
     "typescript": "^5.8.3",
     "vite": "^7.0.2"

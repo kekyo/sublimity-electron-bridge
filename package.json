@@ -1,22 +1,20 @@
 {
   "name": "sublimity-electron-bridge",
-  "version": "1.0.0",
+  "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
+  "license": "MIT",
   "private": true,
   "workspaces": [
     "core",
-    "vite-plugin", 
+    "vite-plugin",
     "cli"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "clean": "npm run clean --workspaces"
+    "clean": "npm run clean --workspaces",
+    "pack": "npm pack --workspaces"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "Electron bridge generator for automatic IPC setup",
   "devDependencies": {
     "@types/node": "^24.0.10",
     "@vitest/ui": "^3.2.4",
