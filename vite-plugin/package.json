@@ -12,6 +12,7 @@
     "ipc",
     "bridge",
     "automatic",
+    "generator",
     "vite",
     "plugin"
   ],

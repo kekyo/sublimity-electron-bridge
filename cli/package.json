@@ -12,6 +12,7 @@
     "ipc",
     "bridge",
     "automatic",
+    "generator",
     "cli"
   ],
   "main": "dist/index.js",
