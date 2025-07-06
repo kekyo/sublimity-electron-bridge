@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite'
-import { ElectronBridgeGenerator, type ElectronBridgeOptions } from '@sublimity-electron-bridge/core'
+import { ElectronBridgeGenerator, type ElectronBridgeOptions } from 'sublimity-electron-bridge-core'
 
 export interface SublimityElectronBridgeOptions extends ElectronBridgeOptions {}
 

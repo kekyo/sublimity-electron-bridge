@@ -1,5 +1,5 @@
 {
-  "name": "@sublimity-electron-bridge/core",
+  "name": "sublimity-electron-bridge-core",
   "private": true,
   "main": "dist/index.js",
   "module": "dist/index.mjs",

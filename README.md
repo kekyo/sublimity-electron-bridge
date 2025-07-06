@@ -1,8 +1,8 @@
 # Sublimity Electron Bridge
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm version](https://badge.fury.io/js/%40sublimity-electron-bridge%2Fcli.svg)](https://www.npmjs.com/package/@sublimity-electron-bridge/cli)
-[![npm version](https://badge.fury.io/js/%40sublimity-electron-bridge%2Fvite-plugin.svg)](https://www.npmjs.com/package/@sublimity-electron-bridge/vite-plugin)
+[![npm version](https://badge.fury.io/js/sublimity-electron-bridge-cli.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-cli)
+[![npm version](https://badge.fury.io/js/sublimity-electron-bridge-vite.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-vite)
 
 An automated code generation tool for Electron applications that eliminates the need for manual IPC (Inter-Process Communication) setup between the main process and renderer process. This tool analyzes TypeScript source code using the TypeScript Compiler API and automatically generates the necessary IPC handlers, preload bridge scripts, and type definitions.
 
@@ -59,7 +59,7 @@ Choose between CLI tool or Vite plugin based on your development workflow:
 Install the CLI package globally or use it with npx:
 
 ```bash
-npm install -g @sublimity-electron-bridge/cli
+npm install -g sublimity-electron-bridge-cli
 ```
 
 #### Basic Usage
@@ -93,7 +93,7 @@ Options:
 Install the Vite plugin for automatic generation during development builds:
 
 ```bash
-npm install --save-dev @sublimity-electron-bridge/vite-plugin
+npm install --save-dev sublimity-electron-bridge-vite
 ```
 
 #### Configuration
@@ -102,7 +102,7 @@ Add the plugin to your `vite.config.ts`:
 
 ```typescript
 import { defineConfig } from 'vite'
-import { sublimityElectronBridge } from '@sublimity-electron-bridge/vite-plugin'
+import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite'
 
 export default defineConfig({
   plugins: [
@@ -216,7 +216,7 @@ async function utilityFunction(): Promise<ReturnType> { /* ... */ }
 
 The tool **does not detect** arrow functions assigned to variables, as TypeScript decorators cannot be applied to variable declarations. This is a limitation of the TypeScript language specification, not the tool itself.
 
-**❌ Not Supported (TypeScript Compilation Error):**
+**Not Supported (TypeScript Compilation Error):**
 
 ```typescript
 // This will cause a TypeScript compilation error
@@ -232,7 +232,7 @@ export const getSystemInfo = async (): Promise<SystemInfo> => {
 }
 ```
 
-**✅ Use These Alternatives Instead:**
+**Use These Alternatives Instead:**
 
 ```typescript
 // Function declaration - Fully supported

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { ElectronBridgeGenerator } from '@sublimity-electron-bridge/core'
+import { ElectronBridgeGenerator } from 'sublimity-electron-bridge-core'
 import { readFileSync } from 'fs'
 import { glob } from 'glob'
 

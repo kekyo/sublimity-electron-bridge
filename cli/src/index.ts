@@ -1,1 +1,1 @@
-export { ElectronBridgeGenerator } from '@sublimity-electron-bridge/core'
+export { ElectronBridgeGenerator } from 'sublimity-electron-bridge-core'

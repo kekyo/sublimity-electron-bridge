@@ -1,5 +1,5 @@
 {
-  "name": "@sublimity-electron-bridge/vite-plugin",
+  "name": "sublimity-electron-bridge-vite",
   "version": "0.1.0",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
@@ -23,10 +23,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "rv --npm --cwd . && npm i && vite build",
-    "dev": "rv --npm --cwd . && npm i && vite build --watch",
-    "test": "rv --npm --cwd . && npm i && vitest run",
-    "test:ui": "rv --npm --cwd . && npm i && vitest --ui",
+    "build": "rv --npm . && npm i && vite build",
+    "dev": "rv --npm . && npm i && vite build --watch",
+    "test": "rv --npm . && npm i && vitest run",
+    "test:ui": "rv --npm . && npm i && vitest --ui",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

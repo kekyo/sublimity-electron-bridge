@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { ElectronBridgeGenerator } from '@sublimity-electron-bridge/core'
+import { ElectronBridgeGenerator } from 'sublimity-electron-bridge-core'
 import { mkdtempSync, readFileSync, existsSync, rmSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
