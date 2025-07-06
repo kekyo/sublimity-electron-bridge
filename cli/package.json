@@ -1,0 +1,40 @@
+{
+  "name": "@sublimity-electron-bridge/cli",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "bin": {
+    "electron-bridge": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "cli",
+    "electron",
+    "typescript",
+    "bridge"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "CLI tool for Electron bridge generation",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "glob": "^10.3.10",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@vitest/ui": "^3.2.4",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.2",
+    "vitest": "^3.2.4"
+  }
+}

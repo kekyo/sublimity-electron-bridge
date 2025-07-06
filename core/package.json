@@ -1,0 +1,34 @@
+{
+  "name": "@sublimity-electron-bridge/core",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "electron",
+    "typescript",
+    "ast",
+    "bridge"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Core logic for Electron bridge generation",
+  "dependencies": {
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@vitest/ui": "^3.2.4",
+    "vite": "^7.0.2",
+    "vitest": "^3.2.4"
+  }
+}

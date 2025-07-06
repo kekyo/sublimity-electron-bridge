@@ -5,17 +5,13 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      name: 'SublimityElectronBridge',
-      fileName: 'index'
+      name: 'ElectronBridgeCore',
+      fileName: 'index',
+      formats: ['es', 'cjs']
     },
+    target: 'node14',
     rollupOptions: {
-      external: ['typescript', 'vite'],
-      output: {
-        globals: {
-          typescript: 'typescript',
-          vite: 'vite'
-        }
-      }
+      external: ['typescript', 'path', 'fs']
     }
   },
   test: {

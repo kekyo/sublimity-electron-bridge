@@ -1,0 +1,37 @@
+{
+  "name": "@sublimity-electron-bridge/vite-plugin",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "vite",
+    "plugin",
+    "electron",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Vite plugin for Electron bridge generation",
+  "dependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@vitest/ui": "^3.2.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
