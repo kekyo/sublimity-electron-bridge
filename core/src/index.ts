@@ -1,60 +1,78 @@
-import * as ts from 'typescript'
-import { resolve } from 'path'
-import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import * as ts from 'typescript';
+import { resolve, dirname, basename, join, relative } from 'path';
+import { writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
+import { randomUUID } from 'crypto';
+
+export interface Logger {
+  readonly info: (msg: string) => void;
+  readonly warn: (msg: string) => void;
+  readonly error: (msg: string) => void;
+}
 
 export interface ElectronBridgeOptions {
   outputDirs?: {
     main?: string
     preload?: string
-  }
-  typeDefinitionsFile?: string
-  defaultNamespace?: string
+  };
+  typeDefinitionsFile?: string;
+  defaultNamespace?: string;
+  logger?: Logger;
+  baseDir?: string;
 }
 
-interface ExposedMethod {
-  className?: string
-  methodName: string
-  namespace: string
-  parameters: { name: string; type: string }[]
-  returnType: string
-  filePath: string
+export interface ExposedMethod {
+  readonly className?: string
+  readonly methodName: string
+  readonly namespace: string
+  readonly parameters: { name: string; type: string }[]
+  readonly returnType: string
+  readonly filePath: string
 }
 
-interface NamespaceGroup {
-  [namespace: string]: ExposedMethod[]
+export interface ElectronBridgeGenerator {
+  readonly analyzeFile: (filePath: string, code: string) => ExposedMethod[];
+  readonly generateFiles: (methods: ExposedMethod[]) => void;
 }
 
-function isCamelCase(str: string): boolean {
-  return /^[a-z][a-zA-Z0-9]*$/.test(str)
-}
+///////////////////////////////////////////////////////////////////////
 
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1)
-}
+export const isCamelCase = (str: string): boolean => {
+  return /^[a-z][a-zA-Z0-9]*$/.test(str);
+};
 
-function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): ExposedMethod[] {
-  const methods: ExposedMethod[] = []
+export const toPascalCase = (str: string): string => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+export const extractExposedMethods = (logger: Logger, sourceFile: ts.SourceFile, filePath: string, defaultNamespace: string = 'electronAPI'): ExposedMethod[] => {
+  const methods: ExposedMethod[] = [];
   
-  function visit(node: ts.Node) {
+  const visit = (node: ts.Node) => {
     // Handle class methods
     if (ts.isClassDeclaration(node) && node.name) {
-      const className = node.name.text
+      const className = node.name.text;
       
       node.members.forEach(member => {
         if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
-          const exposedMethod = processJSDocTag(member, sourceFile, filePath, (member.name as ts.Identifier).text, className)
+          const exposedMethod = processJSDocTag(
+            logger, member, sourceFile, filePath, (member.name as ts.Identifier).text, defaultNamespace, className);
           if (exposedMethod) {
             const parameters = member.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
-            }))
+              type: param.type ?
+                sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+                'any'
+            }));
             
-            const returnType = member.type ? sourceFile.text.substring(member.type.pos, member.type.end).trim() : 'Promise<any>'
+            const returnType = member.type ?
+              sourceFile.text.substring(member.type.pos, member.type.end).trim() :
+              'Promise<any>';
             
             // Check if method returns Promise
             if (member.type && !isPromiseType(member.type)) {
-              throw new Error(`@decorator expose method must return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
-            }
+              logger.warn(`[electron-bridge] Warning: @decorator expose method should return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
+              return // Skip this method
+            };
             
             methods.push({
               className,
@@ -63,26 +81,31 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
               parameters,
               returnType,
               filePath
-            })
+            });
           }
         }
-      })
+      });
     }
     
     // Handle function declarations
     if (ts.isFunctionDeclaration(node) && node.name) {
-      const exposedMethod = processJSDocTag(node, sourceFile, filePath, node.name.text)
+      const exposedMethod = processJSDocTag(logger, node, sourceFile, filePath, node.name.text, defaultNamespace);
       if (exposedMethod) {
         const parameters = node.parameters.map(param => ({
           name: (param.name as ts.Identifier).text,
-          type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
-        }))
+          type: param.type ?
+            sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+            'any'
+        }));
         
-        const returnType = node.type ? sourceFile.text.substring(node.type.pos, node.type.end).trim() : 'Promise<any>'
+        const returnType = node.type ?
+          sourceFile.text.substring(node.type.pos, node.type.end).trim() :
+          'Promise<any>';
         
         // Check if function returns Promise
         if (node.type && !isPromiseType(node.type)) {
-          throw new Error(`@decorator expose function must return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`)
+          logger.warn(`[electron-bridge] Warning: @decorator expose function should return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
+          return; // Skip this function
         }
         
         methods.push({
@@ -102,19 +125,25 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
             declaration.name && ts.isIdentifier(declaration.name) &&
             declaration.initializer && ts.isArrowFunction(declaration.initializer)) {
           
-          const exposedMethod = processJSDocTag(node, sourceFile, filePath, declaration.name.text)
+          const exposedMethod = processJSDocTag(
+            logger, node, sourceFile, filePath, declaration.name.text, defaultNamespace);
           if (exposedMethod) {
-            const arrowFunc = declaration.initializer
+            const arrowFunc = declaration.initializer;
             const parameters = arrowFunc.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: param.type ? sourceFile.text.substring(param.type.pos, param.type.end).trim() : 'any'
-            }))
+              type: param.type ?
+                sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+                'any'
+            }));
             
-            const returnType = arrowFunc.type ? sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() : 'Promise<any>'
+            const returnType = arrowFunc.type ?
+              sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() :
+              'Promise<any>';
             
             // Check if arrow function returns Promise
             if (arrowFunc.type && !isPromiseType(arrowFunc.type)) {
-              throw new Error(`@decorator expose function must return Promise: ${declaration.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, declaration.pos).line + 1}`)
+              logger.warn(`[electron-bridge] Warning: @decorator expose function should return Promise: ${declaration.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, declaration.pos).line + 1}`);
+              return; // Skip this function;
             }
             
             methods.push({
@@ -123,161 +152,198 @@ function extractExposedMethods(sourceFile: ts.SourceFile, filePath: string): Exp
               parameters,
               returnType,
               filePath
-            })
+            });
           }
         }
-      })
+      });
     }
     
-    ts.forEachChild(node, visit)
+    ts.forEachChild(node, visit);
   }
   
-  visit(sourceFile)
-  return methods
-}
+  visit(sourceFile);
+  return methods;
+};
 
-function processJSDocTag(node: ts.Node, sourceFile: ts.SourceFile, filePath: string, methodName: string, className?: string): { namespace: string } | null {
-  const jsDocTags = ts.getJSDocTags(node)
+const processJSDocTag =
+  (logger: Logger, node: ts.Node, sourceFile: ts.SourceFile, filePath: string, methodName: string, defaultNamespace: string, className?: string):
+  { namespace: string } | null => {
+  const jsDocTags = ts.getJSDocTags(node);
   
   for (const tag of jsDocTags) {
     if (tag.tagName && tag.tagName.text === 'decorator' && tag.comment) {
-      const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text || '').join('')
-      const match = comment.match(/^expose\s+(\w+)$/)
+      const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text || '').join('');
+      const match = comment.match(/^expose\s+(\w+)$/);
       
       if (match) {
-        const namespace = match[1]
+        const namespace = match[1];
         if (!isCamelCase(namespace)) {
-          const location = className ? `${className}.${methodName}` : methodName
-          throw new Error(`@decorator expose argument must be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`)
+          const location = className ? `${className}.${methodName}` : methodName;
+          logger.warn(`[electron-bridge] Warning: @decorator expose argument should be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
+          return null; // Skip this method
         }
-        return { namespace }
+        return { namespace };
       } else if (comment === 'expose') {
         // Default namespace when no argument provided
-        return { namespace: 'electronAPI' }
+        return { namespace: defaultNamespace };
       }
     }
   }
   
-  return null
-}
+  return null;
+};
 
-function isPromiseType(typeNode: ts.TypeNode): boolean {
+const isPromiseType = (typeNode: ts.TypeNode): boolean => {
   if (ts.isTypeReferenceNode(typeNode)) {
-    const typeName = typeNode.typeName
+    const typeName = typeNode.typeName;
     if (ts.isIdentifier(typeName) && typeName.text === 'Promise') {
-      return true
+      return true;
     }
   }
-  return false
-}
+  return false;
+};
 
-function groupMethodsByNamespace(methods: ExposedMethod[]): NamespaceGroup {
-  const groups: NamespaceGroup = {}
-  
+const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedMethod[]> => {
+  const groups = new Map<string, ExposedMethod[]>();
+
   for (const method of methods) {
-    if (!groups[method.namespace]) {
-      groups[method.namespace] = []
+    let methods = groups.get(method.namespace);
+    if (!methods) {
+      methods = [];
+      groups.set(method.namespace, methods);
     }
-    groups[method.namespace].push(method)
+    methods.push(method);
   }
-  
-  return groups
-}
 
-function generateMainHandlers(namespaceGroups: NamespaceGroup): string {
-  const imports = new Set<string>()
-  const singletonInstances = new Set<string>()
-  const handlers: string[] = []
+  for (const methods of groups.values()) {
+    methods.sort((a, b) => a.methodName.localeCompare(b.methodName));
+  }
+
+  return new Map([...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+};
+
+const generateMainHandlers = (
+  namespaceGroups: Map<string, ExposedMethod[]>,
+  baseDir?: string, outputDir?: string): string => {
+
+  const imports = new Set<string>();
+  const singletonInstances = new Set<string>();
+  const handlers: string[] = [];
   
   // Generate imports and collect unique class names
-  for (const methods of Object.values(namespaceGroups)) {
+  for (const methods of namespaceGroups.values()) {
     for (const method of methods) {
       if (method.className) {
-        const importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/')
-        imports.add(`import { ${method.className} } from '${importPath}'`)
-        singletonInstances.add(method.className)
+        let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
+        
+        // Convert to relative path if baseDir and outputDir are provided
+        if (baseDir && outputDir) {
+          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+          const methodFileAbsPath = resolve(baseDir, method.filePath);
+          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          // Ensure relative path starts with ./ if it doesn't start with ../
+          if (!importPath.startsWith('.')) {
+            importPath = './' + importPath;
+          }
+        }
+        
+        imports.add(`import { ${method.className} } from '${importPath}'`);
+        singletonInstances.add(method.className);
       }
     }
   }
-  
+
   // Generate singleton instance declarations
-  const instanceDeclarations: string[] = []
-  for (const className of Array.from(singletonInstances)) {
-    const instanceVar = `${className.toLowerCase()}Instance`
-    instanceDeclarations.push(`const ${instanceVar} = new ${className}()`)
+  const instanceDeclarations: string[] = [];
+  for (const className of Array.from(singletonInstances).sort()) {
+    const instanceVar = `${className.toLowerCase()}Instance`;
+    instanceDeclarations.push(`const ${instanceVar} = new ${className}()`);
   }
-  
-  // Generate handler registrations
-  for (const [namespace, methods] of Object.entries(namespaceGroups)) {
+
+  for (const [namespace, methods] of namespaceGroups.entries()) {
     for (const method of methods) {
       if (method.className) {
-        const instanceVar = `${method.className.toLowerCase()}Instance`
-        const channelName = `api:${namespace}:${method.methodName}`
-        const params = method.parameters.map(p => p.name).join(', ')
-        const args = method.parameters.length > 0 ? `, ${params}` : ''
+        const instanceVar = `${method.className.toLowerCase()}Instance`;
+        const channelName = `api:${namespace}:${method.methodName}`;
+        const params = method.parameters.map(p => p.name).join(', ');
+        const args = method.parameters.length > 0 ? `, ${params}` : '';
         
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${instanceVar}.${method.methodName}(${params}))`)
+        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${instanceVar}.${method.methodName}(${params}))`);
       } else {
         // Standalone function
-        const channelName = `api:${namespace}:${method.methodName}`
-        const params = method.parameters.map(p => p.name).join(', ')
-        const args = method.parameters.length > 0 ? `, ${params}` : ''
+        const channelName = `api:${namespace}:${method.methodName}`;
+        const params = method.parameters.map(p => p.name).join(', ');
+        const args = method.parameters.length > 0 ? `, ${params}` : '';
         
-        const importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/')
-        imports.add(`import { ${method.methodName} } from '${importPath}'`)
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${method.methodName}(${params}))`)
+        let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
+        
+        // Convert to relative path if baseDir and outputDir are provided
+        if (baseDir && outputDir) {
+          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+          const methodFileAbsPath = resolve(baseDir, method.filePath);
+          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          // Ensure relative path starts with ./ if it doesn't start with ../
+          if (!importPath.startsWith('.')) {
+            importPath = './' + importPath;
+          }
+        }
+        
+        imports.add(`import { ${method.methodName} } from '${importPath}'`);
+        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${method.methodName}(${params}))`);
       }
     }
   }
-  
+
   return [
     "import { ipcMain } from 'electron'",
-    ...Array.from(imports),
+    ...Array.from(imports).sort(),
     '',
     '// Create singleton instances',
     ...instanceDeclarations,
     '',
     '// Register IPC handlers',
     ...handlers
-  ].join('\n')
-}
+  ].join('\n');
+};
 
-function generatePreloadBridge(namespaceGroups: NamespaceGroup): string {
-  const bridges: string[] = []
+const generatePreloadBridge = (
+  namespaceGroups: Map<string, ExposedMethod[]>): string => {
+  const bridges: string[] = [];
   
-  for (const [namespace, methods] of Object.entries(namespaceGroups)) {
+  for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ')
-      const args = method.parameters.map(p => p.name).join(', ')
-      const channelName = `api:${namespace}:${method.methodName}`
+      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
+      const args = method.parameters.map(p => p.name).join(', ');
+      const channelName = `api:${namespace}:${method.methodName}`;
       
-      return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`
-    }).join(',\n')
+      return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`;
+    }).join(',\n');
     
-    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n})`)
+    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n})`);
   }
   
   return [
     "import { contextBridge, ipcRenderer } from 'electron'",
     '',
     ...bridges
-  ].join('\n')
-}
+  ].join('\n');
+};
 
-function generateTypeDefinitions(namespaceGroups: NamespaceGroup): string {
-  const interfaces: string[] = []
-  const windowProperties: string[] = []
+const generateTypeDefinitions = (
+  namespaceGroups: Map<string, ExposedMethod[]>): string => {
+  const interfaces: string[] = [];
+  const windowProperties: string[] = [];
   
-  for (const [namespace, methods] of Object.entries(namespaceGroups)) {
-    const typeName = toPascalCase(namespace)
-    
+  for (const [namespace, methods] of namespaceGroups.entries()) {
+    const typeName = toPascalCase(namespace);
+
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ')
-      return `  ${method.methodName}(${params}): ${method.returnType}`
-    }).join('\n')
+      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
+      return `  ${method.methodName}(${params}): ${method.returnType}`;
+    }).join('\n');
     
-    interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`)
-    windowProperties.push(`  ${namespace}: ${typeName}`)
+    interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);
+    windowProperties.push(`    ${namespace}: ${typeName}`);
   }
   
   return [
@@ -290,78 +356,125 @@ function generateTypeDefinitions(namespaceGroups: NamespaceGroup): string {
     '}',
     '',
     'export {}'
-  ].join('\n')
-}
+  ].join('\n');
+};
 
-function ensureDirectoryExists(dirPath: string): void {
+const ensureDirectoryExists = (dirPath: string): void => {
   if (!existsSync(dirPath)) {
-    mkdirSync(dirPath, { recursive: true })
+    mkdirSync(dirPath, { recursive: true });
   }
-}
+};
 
-export class ElectronBridgeGenerator {
-  private options: ElectronBridgeOptions
+const atomicWriteFileSync = (filePath: string, content: string): void => {
+  const dir = dirname(filePath);
+  const base = basename(filePath);
+  const tempFile = join(dir, `.${base}.${randomUUID()}.tmp`);
+
+  try {
+    ensureDirectoryExists(dir);
+    writeFileSync(tempFile, content, 'utf8');
+    renameSync(tempFile, filePath);
+  } catch (error) {
+    // Clean up temp file if it exists
+    try {
+      if (existsSync(tempFile)) {
+        require('fs').unlinkSync(tempFile);
+      }
+    } catch {}
+    throw error;
+  }
+};
+
+const isGeneratedFile = (filePath: string, outputDirs: { main?: string; preload?: string }, typeDefinitionsFile?: string): boolean => {
+  const normalizedPath = filePath.replace(/\\/g, '/');
   
-  constructor(options: ElectronBridgeOptions = {}) {
-    this.options = {
-      outputDirs: {
-        main: options.outputDirs?.main || 'main/generated',
-        preload: options.outputDirs?.preload || 'preload/generated'
-      },
-      typeDefinitionsFile: options.typeDefinitionsFile || 'src/generated/electron-api.d.ts',
-      defaultNamespace: options.defaultNamespace || 'electronAPI'
-    }
+  // Check if file is in main output directory
+  if (outputDirs.main && normalizedPath.includes(outputDirs.main.replace(/\\/g, '/'))) {
+    return true;
   }
+  
+  // Check if file is in preload output directory
+  if (outputDirs.preload && normalizedPath.includes(outputDirs.preload.replace(/\\/g, '/'))) {
+    return true;
+  }
+  
+  // Check if file is the type definitions file
+  if (typeDefinitionsFile && normalizedPath.includes(typeDefinitionsFile.replace(/\\/g, '/'))) {
+    return true;
+  }
+  
+  return false;
+};
 
-  analyzeFile(filePath: string, code: string): ExposedMethod[] {
+export const createConsoleLogger = () : Logger => {
+  return {
+    info: console.info,
+    warn: console.warn,
+    error: console.error
+  };
+};
+
+export const createElectronBridgeGenerator =
+  (options: ElectronBridgeOptions = {}) : ElectronBridgeGenerator => {
+
+  const _options = {
+    outputDirs: {
+      main: options.outputDirs?.main || 'main/generated',
+      preload: options.outputDirs?.preload || 'preload/generated'
+    },
+    typeDefinitionsFile: options.typeDefinitionsFile || 'src/generated/electron-api.d.ts',
+    defaultNamespace: options.defaultNamespace || 'electronAPI',
+    logger: options.logger || createConsoleLogger(),
+    baseDir: options.baseDir
+  };
+
+  const analyzeFile = (filePath: string, code: string): ExposedMethod[] => {
+    // Skip generated files to avoid analysis loops
+    if (isGeneratedFile(filePath, _options.outputDirs, _options.typeDefinitionsFile)) {
+      return [];
+    }
+
     const sourceFile = ts.createSourceFile(
       filePath,
       code,
       ts.ScriptTarget.Latest,
       true
-    )
+    );
 
-    return extractExposedMethods(sourceFile, filePath)
-  }
+    return extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace);
+  };
 
-  generateFiles(methods: ExposedMethod[]): void {
+  const generateFiles = (methods: ExposedMethod[]): void => {
     if (methods.length === 0) {
-      return
+      return;
     }
 
-    const namespaceGroups = groupMethodsByNamespace(methods)
+    // Sort methods by namespace to ensure deterministic order
+    const namespaceGroups = groupMethodsByNamespace(methods);
 
     // Generate main handlers
-    const mainHandlersCode = generateMainHandlers(namespaceGroups)
-    ensureDirectoryExists(this.options.outputDirs!.main!)
-    writeFileSync(resolve(this.options.outputDirs!.main!, 'ipc-handlers.ts'), mainHandlersCode)
+    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, _options.outputDirs.main);
+    const mainFilePath = resolve(_options.outputDirs!.main!, 'ipc-handlers.ts');
+    atomicWriteFileSync(mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
-    const preloadBridgeCode = generatePreloadBridge(namespaceGroups)
-    ensureDirectoryExists(this.options.outputDirs!.preload!)
-    writeFileSync(resolve(this.options.outputDirs!.preload!, 'bridge.ts'), preloadBridgeCode)
+    const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
+    const preloadFilePath = resolve(_options.outputDirs!.preload!, 'bridge.ts');
+    atomicWriteFileSync(preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
-    const typeDefsCode = generateTypeDefinitions(namespaceGroups)
-    const typeDefsDir = this.options.typeDefinitionsFile!.substring(0, this.options.typeDefinitionsFile!.lastIndexOf('/'))
-    ensureDirectoryExists(typeDefsDir)
-    writeFileSync(this.options.typeDefinitionsFile!, typeDefsCode)
+    const typeDefsCode = generateTypeDefinitions(namespaceGroups);
+    atomicWriteFileSync(_options.typeDefinitionsFile!, typeDefsCode);
 
-    console.log(`[electron-bridge] Generated files:`)
-    console.log(`  - ${resolve(this.options.outputDirs!.main!, 'ipc-handlers.ts')}`)
-    console.log(`  - ${resolve(this.options.outputDirs!.preload!, 'bridge.ts')}`)
-    console.log(`  - ${this.options.typeDefinitionsFile}`)
-    console.log(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`)
+    _options.logger.info(`[electron-bridge] Generated files:`);
+    _options.logger.info(`  - ${mainFilePath}`);
+    _options.logger.info(`  - ${preloadFilePath}`);
+    _options.logger.info(`  - ${_options.typeDefinitionsFile}`);
+    _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
   }
-}
 
-// Export utility functions for external use
-export {
-  extractExposedMethods,
-  groupMethodsByNamespace,
-  generateMainHandlers,
-  generatePreloadBridge,
-  generateTypeDefinitions,
-  isCamelCase,
-  toPascalCase
-}
+  return {
+    analyzeFile,
+    generateFiles
+  };
+};
