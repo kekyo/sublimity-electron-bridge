@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.5.2",
+  "version": "0.6.3",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
     "type": "git",
@@ -34,13 +34,13 @@
   "dependencies": {
     "glob": "^11.0.3",
     "typescript": "^5.8.3",
-    "vite": "^7.0.2",
-    "vite-plugin-dts": "^4.5.4"
+    "vite": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.10",
     "@vitest/ui": "^3.2.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "vite-plugin-dts": "^4.5.4"
   }
 }
