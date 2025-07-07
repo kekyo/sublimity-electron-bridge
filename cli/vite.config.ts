@@ -1,7 +1,14 @@
-import { defineConfig } from 'vite'
-import { resolve } from 'path'
+import { defineConfig } from 'vite';
+import { resolve } from 'path';
+import { readFileSync } from 'fs';
+
+// Read version from package.json
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
 
 export default defineConfig({
+  define: {
+    __VERSION__: JSON.stringify(packageJson.version)
+  },
   build: {
     lib: {
       entry: {
@@ -14,11 +21,7 @@ export default defineConfig({
     },
     target: 'node14',
     rollupOptions: {
-      external: ['commander', 'glob', 'fs', 'path', 'typescript']
+      external: ['commander', 'glob', 'fs', 'path', 'typescript', 'crypto', 'sublimity-electron-bridge-core']
     }
-  },
-  test: {
-    globals: true,
-    environment: 'node'
   }
-})
+});

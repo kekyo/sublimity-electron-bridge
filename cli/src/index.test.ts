@@ -1,119 +1,263 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { ElectronBridgeGenerator } from 'sublimity-electron-bridge-core'
-import { mkdtempSync, readFileSync, existsSync, rmSync, readdirSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
-import { glob } from 'glob'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { spawn } from 'child_process';
+import { mkdtempSync, existsSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
-describe('CLI Package', () => {
-  let tempDir: string
-  let testFixturesDir: string
+describe('CLI Integration Tests', () => {
+  let tempDir: string;
+  let testSourceDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'cli-test-'))
-    testFixturesDir = join(__dirname, 'test-fixtures')
-  })
+    tempDir = mkdtempSync(join(tmpdir(), 'cli-test-'));
+    testSourceDir = join(tempDir, 'src');
+    mkdirSync(testSourceDir, { recursive: true });
+
+    // Create test TypeScript source files
+    writeFileSync(join(testSourceDir, 'UserService.ts'), `
+export class UserService {
+  /**
+   * @decorator expose userAPI
+   */
+  async getUser(id: number): Promise<User> {
+    return { id, name: "Test User" } as User
+  }
+
+  /**
+   * @decorator expose
+   */
+  async getCurrentUser(): Promise<User | null> {
+    return null
+  }
+}
+
+interface User {
+  id: number
+  name: string
+}
+`);
+
+    writeFileSync(join(testSourceDir, 'system.ts'), `
+/**
+ * @decorator expose systemAPI
+ */
+export async function getSystemInfo(): Promise<SystemInfo> {
+  return {
+    platform: process.platform,
+    version: process.version
+  }
+}
+
+/**
+ * @decorator expose
+ */
+export async function getUptime(): Promise<number> {
+  return process.uptime()
+}
+
+interface SystemInfo {
+  platform: string
+  version: string
+}
+`)
+  });
 
   afterEach(() => {
     if (existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(tempDir, { recursive: true, force: true });
     }
-  })
+  });
 
-  it('should process files and generate bridge code', async () => {
-    const generator = new ElectronBridgeGenerator({
-      outputDirs: {
-        main: join(tempDir, 'main'),
-        preload: join(tempDir, 'preload')
-      },
-      typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts')
-    })
+  const runCLI = (args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+    return new Promise((resolve) => {
+      const cliPath = join(__dirname, '../dist/cli.js');
+      const child = spawn('node', [cliPath, ...args], {
+        cwd: tempDir,
+        env: { ...process.env }
+      });
 
-    // Read test fixture files
-    const userServiceCode = readFileSync(join(testFixturesDir, 'UserService.ts'), 'utf-8')
-    const systemCode = readFileSync(join(testFixturesDir, 'system.ts'), 'utf-8')
+      let stdout = '';
+      let stderr = '';
 
-    // Analyze files
-    const userServiceMethods = generator.analyzeFile(join(testFixturesDir, 'UserService.ts'), userServiceCode)
-    const systemMethods = generator.analyzeFile(join(testFixturesDir, 'system.ts'), systemCode)
+      child.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
 
-    // Verify methods were extracted
-    expect(userServiceMethods).toHaveLength(3)
-    expect(systemMethods).toHaveLength(3)
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
 
-    // Verify method details
-    expect(userServiceMethods[0]).toMatchObject({
-      className: 'UserService',
-      methodName: 'getUser',
-      namespace: 'userAPI',
-      returnType: 'Promise<User>'
-    })
+      child.on('close', (code) => {
+        resolve({ stdout, stderr, exitCode: code || 0 });
+      });
+    });
+  }
 
-    expect(systemMethods[0]).toMatchObject({
-      methodName: 'getSystemInfo',
-      namespace: 'systemAPI',
-      returnType: 'Promise<SystemInfo>'
-    })
-
-    // Generate files
-    const allMethods = [...userServiceMethods, ...systemMethods]
-    generator.generateFiles(allMethods)
-
-    // Verify generated files exist
-    expect(existsSync(join(tempDir, 'main'))).toBe(true)
-    expect(existsSync(join(tempDir, 'preload'))).toBe(true)
-    expect(existsSync(join(tempDir, 'types', 'electron.d.ts'))).toBe(true)
-
-    // Verify main handler files
-    const mainFiles = readdirSync(join(tempDir, 'main'))
-    expect(mainFiles).toContain('ipc-handlers.ts')
+  it('should generate correct bridge files from TypeScript sources', async () => {
+    const result = await runCLI(['generate', 'src/UserService.ts', 'src/system.ts']);
     
-    // Verify preload bridge files
-    const preloadFiles = readdirSync(join(tempDir, 'preload'))
-    expect(preloadFiles).toContain('bridge.ts')
-    
-    // Verify contents of generated files contain expected methods
-    const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8')
-    expect(mainHandlers).toContain('getUser')
-    expect(mainHandlers).toContain('getSystemInfo')
-    expect(mainHandlers).toContain('getCurrentUser')
-    
-    const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8')
-    expect(preloadBridge).toContain('userAPI')
-    expect(preloadBridge).toContain('systemAPI')
-    expect(preloadBridge).toContain('electronAPI')
+    expect(result.exitCode).toBe(0);
 
-    // Verify type definitions content
-    const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8')
-    expect(typeDefs).toContain('UserAPI')
-    expect(typeDefs).toContain('SystemAPI')
-    expect(typeDefs).toContain('ElectronAPI')
-    expect(typeDefs).toContain('getUser')
-    expect(typeDefs).toContain('getSystemInfo')
-  })
-
-  it('should handle file discovery with glob patterns', async () => {
-    // Test the glob functionality that CLI would use
-    const pattern = join(testFixturesDir, '**/*.ts')
-    const files = await glob(pattern)
+    // Verify main IPC handlers file
+    const mainHandlersPath = join(tempDir, 'main/generated/ipc-handlers.ts');
+    expect(existsSync(mainHandlersPath)).toBe(true);
     
-    expect(files.length).toBeGreaterThan(0)
-    expect(files.some(f => f.includes('UserService.ts'))).toBe(true)
-    expect(files.some(f => f.includes('system.ts'))).toBe(true)
-  })
+    const mainHandlers = readFileSync(mainHandlersPath, 'utf-8');
+    const expectedMainHandlers = `import { ipcMain } from 'electron'
+import { UserService } from 'src/UserService'
+import { getSystemInfo } from 'src/system'
+import { getUptime } from 'src/system'
 
-  it('should handle files with no exposed methods gracefully', async () => {
-    const generator = new ElectronBridgeGenerator({
-      outputDirs: {
-        main: join(tempDir, 'main'),
-        preload: join(tempDir, 'preload')
-      },
-      typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts')
-    })
+// Create singleton instances
+const userserviceInstance = new UserService()
 
-    const emptyFileCode = 'export const dummy = true;'
-    const methods = generator.analyzeFile('dummy.ts', emptyFileCode)
+// Register IPC handlers
+ipcMain.handle('api:electronAPI:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
+ipcMain.handle('api:electronAPI:getUptime', (event) => getUptime())
+ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
+ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
     
-    expect(methods).toHaveLength(0)
-  })
+    expect(mainHandlers).toBe(expectedMainHandlers);
+
+    // Verify preload bridge file
+    const preloadBridgePath = join(tempDir, 'preload/generated/bridge.ts');
+    expect(existsSync(preloadBridgePath)).toBe(true);
+    
+    const preloadBridge = readFileSync(preloadBridgePath, 'utf-8');
+    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron'
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  getCurrentUser: () => ipcRenderer.invoke('api:electronAPI:getCurrentUser'),
+  getUptime: () => ipcRenderer.invoke('api:electronAPI:getUptime')
 })
+contextBridge.exposeInMainWorld('systemAPI', {
+  getSystemInfo: () => ipcRenderer.invoke('api:systemAPI:getSystemInfo')
+})
+contextBridge.exposeInMainWorld('userAPI', {
+  getUser: (id: number) => ipcRenderer.invoke('api:userAPI:getUser', id)
+})`;
+    
+    expect(preloadBridge).toBe(expectedPreloadBridge);
+
+    // Verify type definitions file
+    const typeDefsPath = join(tempDir, 'src/generated/electron-api.d.ts');
+    expect(existsSync(typeDefsPath)).toBe(true);
+    
+    const typeDefs = readFileSync(typeDefsPath, 'utf-8');
+    const expectedTypeDefs = `interface ElectronAPI {
+  getCurrentUser(): Promise<User | null>
+  getUptime(): Promise<number>
+}
+interface SystemAPI {
+  getSystemInfo(): Promise<SystemInfo>
+}
+interface UserAPI {
+  getUser(id: number): Promise<User>
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI
+    systemAPI: SystemAPI
+    userAPI: UserAPI
+  }
+}
+
+export {}`;
+    
+    expect(typeDefs).toBe(expectedTypeDefs);
+  })
+
+  it('should use custom output directories when specified', async () => {
+    const result = await runCLI([
+      'generate',
+      'src/UserService.ts', 'src/system.ts',
+      '--main', 'custom-main',
+      '--preload', 'custom-preload',
+      '--types', 'custom-types/api.d.ts'
+    ]);
+    
+    expect(result.exitCode).toBe(0);
+
+    // Verify files exist in custom locations
+    expect(existsSync(join(tempDir, 'custom-main/ipc-handlers.ts'))).toBe(true);
+    expect(existsSync(join(tempDir, 'custom-preload/bridge.ts'))).toBe(true);
+    expect(existsSync(join(tempDir, 'custom-types/api.d.ts'))).toBe(true);
+
+    // Verify content is correct
+    const mainHandlers = readFileSync(join(tempDir, 'custom-main/ipc-handlers.ts'), 'utf-8');
+    const expectedMainHandlers = `import { ipcMain } from 'electron'
+import { UserService } from 'src/UserService'
+import { getSystemInfo } from 'src/system'
+import { getUptime } from 'src/system'
+
+// Create singleton instances
+const userserviceInstance = new UserService()
+
+// Register IPC handlers
+ipcMain.handle('api:electronAPI:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
+ipcMain.handle('api:electronAPI:getUptime', (event) => getUptime())
+ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
+ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
+    
+    expect(mainHandlers).toBe(expectedMainHandlers);
+  });
+
+  it('should handle empty input pattern gracefully', async () => {
+    const result = await runCLI(['generate', 'src/NonExistentFile.ts']);
+    
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toMatch(/Error analyzing.*NonExistentFile\.ts/);
+  });
+
+  it('should use custom default namespace', async () => {
+    const result = await runCLI([
+      'generate',
+      'src/UserService.ts', 'src/system.ts',
+      '--namespace', 'customAPI'
+    ]);
+    
+    expect(result.exitCode).toBe(0);
+
+    const mainHandlers = readFileSync(join(tempDir, 'main/generated/ipc-handlers.ts'), 'utf-8');
+    const expectedMainHandlers = `import { ipcMain } from 'electron'
+import { UserService } from 'src/UserService'
+import { getSystemInfo } from 'src/system'
+import { getUptime } from 'src/system'
+
+// Create singleton instances
+const userserviceInstance = new UserService()
+
+// Register IPC handlers
+ipcMain.handle('api:customAPI:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
+ipcMain.handle('api:customAPI:getUptime', (event) => getUptime())
+ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
+ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
+    
+    expect(mainHandlers).toBe(expectedMainHandlers);
+
+    const typeDefs = readFileSync(join(tempDir, 'src/generated/electron-api.d.ts'), 'utf-8');
+    const expectedTypeDefs = `interface CustomAPI {
+  getCurrentUser(): Promise<User | null>
+  getUptime(): Promise<number>
+}
+interface SystemAPI {
+  getSystemInfo(): Promise<SystemInfo>
+}
+interface UserAPI {
+  getUser(id: number): Promise<User>
+}
+
+declare global {
+  interface Window {
+    customAPI: CustomAPI
+    systemAPI: SystemAPI
+    userAPI: UserAPI
+  }
+}
+
+export {}`;
+    
+    expect(typeDefs).toBe(expectedTypeDefs);
+  });
+});

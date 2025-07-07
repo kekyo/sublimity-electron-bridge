@@ -68,26 +68,26 @@ npm install -g sublimity-electron-bridge-cli
 #### Basic Usage
 
 ```bash
-# Generate bridge code for all TypeScript files in src/
-seb src/**/*.ts
+# Generate bridge code for specific TypeScript files
+seb generate src/services/FileService.ts src/utils/system.ts
 
 # Specify custom output directories
-seb src/**/*.ts --main-dir main/generated --preload-dir preload/generated
+seb generate src/services/FileService.ts --main main/generated --preload preload/generated
 
 # Custom type definitions location
-seb src/**/*.ts --types-file types/electron-api.d.ts
+seb generate src/services/FileService.ts --types types/electron-api.d.ts
 ```
 
 #### CLI Options
 
 ```bash
-seb [options] <files...>
+seb generate <files...>
 
 Options:
-  --main-dir <dir>      Output directory for main process handlers (default: "main/generated")
-  --preload-dir <dir>   Output directory for preload bridge scripts (default: "preload/generated")
-  --types-file <file>   Output file for TypeScript type definitions (default: "src/generated/electron-api.d.ts")
-  --namespace <name>    Default namespace for methods without explicit namespace (default: "electronAPI")
+  -m, --main <dir>      Main process output directory (default: "main/generated")
+  -p, --preload <dir>   Preload script output directory (default: "preload/generated") 
+  -t, --types <file>    Type definitions output file (default: "src/generated/electron-api.d.ts")
+  -n, --namespace <name> Default namespace (default: "electronAPI")
   -h, --help           Display help information
 ```
 
@@ -131,6 +131,7 @@ interface SublimityElectronBridgeOptions {
   }
   typeDefinitionsFile?: string  // Default: "src/generated/electron-api.d.ts"
   defaultNamespace?: string     // Default: "electronAPI"
+  enableWorker?: boolean        // Default: false - Enable worker thread processing
 }
 ```
 

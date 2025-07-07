@@ -1,48 +1,153 @@
 import type { Plugin } from 'vite'
-import { ElectronBridgeGenerator, type ElectronBridgeOptions } from 'sublimity-electron-bridge-core'
+import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, Logger } from 'sublimity-electron-bridge-core'
+import { Worker } from 'worker_threads'
+import { join, dirname } from 'path'
+import { promises as fs } from 'fs'
+import { glob } from 'glob'
+import { fileURLToPath } from 'url'
 
-export interface SublimityElectronBridgeOptions extends ElectronBridgeOptions {}
+///////////////////////////////////////////////////////////////////////
 
-export function sublimityElectronBridge(options: SublimityElectronBridgeOptions = {}): Plugin {
-  const generator = new ElectronBridgeGenerator(options)
-  const allMethods: any[] = []
+const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
+  // Default source patterns
+  const defaultPatterns = [
+    'src/**/*.ts',
+    'src/**/*.tsx',
+    'lib/**/*.ts', 
+    'lib/**/*.tsx'
+  ];
   
-  return {
-    name: 'sublimity-electron-bridge',
-    configResolved() {
-      // Plugin initialization logic
-    },
-    buildStart() {
-      // Clear previous methods on new build
-      allMethods.length = 0
-    },
-    transform(code, id) {
-      // Transform logic using TypeScript compiler API
-      if (!id.endsWith('.ts') && !id.endsWith('.tsx')) {
-        return null
-      }
-
-      try {
-        const methods = generator.analyzeFile(id, code)
-        allMethods.push(...methods)
-      } catch (error) {
-        this.error(error instanceof Error ? error.message : String(error))
-      }
-
-      return {
-        code,
-        map: null
-      }
-    },
-    buildEnd() {
-      // Generate files at the end of build
-      try {
-        generator.generateFiles(allMethods)
-      } catch (error) {
-        this.error(error instanceof Error ? error.message : String(error))
-      }
+  // Get source patterns from options (for future extension)
+  const patterns = (options as any).sourcePatterns || defaultPatterns;
+  
+  const allFiles: string[] = [];
+  
+  for (const pattern of patterns) {
+    try {
+      const files = await glob(pattern, { 
+        ignore: ['**/node_modules/**', '**/dist/**', '**/*.d.ts'],
+        absolute: true
+      });
+      allFiles.push(...files);
+    } catch (error) {
+      // Ignore pattern matching errors and continue
     }
   }
+  
+  // Remove duplicates
+  return [...new Set(allFiles)];
+};
+
+const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
+  const generator = createElectronBridgeGenerator(options);
+  
+  // Read and analyze all files in parallel
+  const analysisPromises = filePaths.map(async (filePath) => {
+    try {
+      await fs.access(filePath); // Check file existence
+      const code = await fs.readFile(filePath, 'utf-8');
+      const methods = generator.analyzeFile(filePath, code);
+      return methods;
+    } catch (error) {
+      logger.warn(`[electron-bridge] Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
+  });
+
+  const methodArrays = await Promise.all(analysisPromises);
+  const allMethods = methodArrays.flat();
+  
+  // Generate files once
+  if (allMethods.length > 0) {
+    generator.generateFiles(allMethods);
+  }
+};
+
+const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
+  return new Promise(resolve => {
+    // Get the directory of the current module
+    const currentDir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+    const worker = new Worker(join(currentDir, 'worker.js'), {
+      workerData: {
+        options: {
+          outputDirs: options.outputDirs,
+          typeDefinitionsFile: options.typeDefinitionsFile,
+          defaultNamespace: options.defaultNamespace,
+          baseDir: options.baseDir
+        },
+        filePaths
+      },
+    });
+
+    worker.on('message', ({type, message}) => {
+      switch (type) {
+        case 'info': logger.info(message);
+        case 'warn': logger.warn(message);
+        default: logger.error(message);
+      }
+    });
+    worker.on('error', error => {
+      logger.warn(`[electron-bridge] Generation error: ${error instanceof Error ? error.message : String(error)}`)
+    });
+    worker.on('exit', code => {
+      if (code != 0) {
+        logger.warn(`[electron-bridge] Generation error: aborted worker: ${code}`)
+      }
+      resolve();
+    });
+  });
+};
+
+///////////////////////////////////////////////////////////////////////
+
+/**
+ * Sublimity Electron Bridge Vite plugin options
+ */
+export interface SublimityElectronBridgeVitePluginOptions extends ElectronBridgeOptions {
+  /**
+   * Whether to enable the worker for processing files (Default: true)
+   */
+  enableWorker?: boolean;
 }
 
-export default sublimityElectronBridge
+/**
+ * Sublimity Electron Bridge Vite plugin
+ * @param options - The options for the plugin
+ * @returns The plugin
+ */
+export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePluginOptions = {}): Plugin => {
+  const logger = options.logger ?? createConsoleLogger();
+
+  const processAllFiles = async (): Promise<void> => {
+    try {
+      // 1. Collect source files from directories
+      const sourceFiles = await collectSourceFiles(options);
+      
+      if (sourceFiles.length === 0) {
+        return;
+      }
+      
+      // 2. Process all files in batch
+      if (options.enableWorker ?? true) {
+        await processBatchOnWorker(logger, options, sourceFiles);
+      } else {
+        await processBatchDirectly(logger, options, sourceFiles);
+      }
+    } catch (error) {
+      logger.warn(`[electron-bridge] Error in processAllFiles: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  return {
+    name: 'sublimity-electron-bridge',
+    buildStart: () => {
+      // Process all files at build start
+      return processAllFiles();
+    },
+    handleHotUpdate: async () => {
+      // Re-process all files on hot update
+      await processAllFiles();
+      return [];
+    }
+  };
+};

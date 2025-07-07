@@ -28,6 +28,7 @@
     "@types/node": "^24.0.10",
     "@vitest/ui": "^3.2.4",
     "vite": "^7.0.2",
+    "vite-plugin-dts": "^4.3.0",
     "vitest": "^3.2.4"
   }
 }
