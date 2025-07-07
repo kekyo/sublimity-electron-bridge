@@ -4,25 +4,17 @@ import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
+import { createDeferred, Deferred } from 'async-primitives';
 
 ///////////////////////////////////////////////////////////////////////
 
-const collectSourceFiles = async (options: ElectronBridgeOptions & { sourceFiles?: string[] }): Promise<string[]> => {
-  // If sourceFiles are explicitly provided, use them
-  if (options.sourceFiles) {
-    return options.sourceFiles;
-  }
-
+const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
   // Default source patterns
   const defaultPatterns = [
-    'src/**/*.ts',
-    'src/**/*.tsx',
-    'lib/**/*.ts', 
-    'lib/**/*.tsx'
+    'src/main/**/*.ts'
   ];
   
   const allFiles: string[] = [];
-  
   for (const pattern of defaultPatterns) {
     try {
       const files = await glob(pattern, { 
@@ -77,7 +69,8 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
     const worker = new Worker(workerPath, {
       workerData: {
         options: {
-          outputDirs: options.outputDirs,
+          mainProcessHandlerFile: options.mainProcessHandlerFile,
+          preloadHandlerFile: options.preloadHandlerFile,
           typeDefinitionsFile: options.typeDefinitionsFile,
           defaultNamespace: options.defaultNamespace,
           baseDir: options.baseDir
@@ -113,28 +106,23 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
  */
 export interface SublimityElectronBridgeVitePluginOptions {
   /**
-   * The output directories for the generated files
+   * The output file path for the main process handlers
+   * @remarks Default: 'src/main/generated/seb_main.ts'
    */
-  outputDirs?: {
-    /**
-     * The output directory for the main process
-     * @remarks Default: 'src/main/generated'
-     */
-    main?: string
-    /**
-     * The output directory for the preload process
-     * @remarks Default: 'src/preload/generated'
-     */
-    preload?: string
-  };
+  mainProcessHandlerFile?: string;
+  /**
+   * The output file path for the preload handlers
+   * @remarks Default: 'src/preload/generated/seb_preload.ts'
+   */
+  preloadHandlerFile?: string;
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/renderer/src/generated/electron-api.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/seb_types.d.ts'
    */
   typeDefinitionsFile?: string;
   /**
    * The default namespace for the exposed methods
-   * @remarks Default: 'electronAPI'
+   * @remarks Default: 'mainProcess'
    */
   defaultNamespace?: string;
   /**
@@ -142,7 +130,8 @@ export interface SublimityElectronBridgeVitePluginOptions {
    */
   enableWorker?: boolean;
   /**
-   * Source files to analyze (Default: auto-discovery with patterns)
+   * Source files to analyze
+   * @remarks Default: 'src/main/*.ts'
    */
   sourceFiles?: string[];
 }
@@ -155,25 +144,25 @@ export interface SublimityElectronBridgeVitePluginOptions {
 export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePluginOptions = {}): Plugin => {
   const logger = createConsoleLogger();
 
-  const processAllFiles = async (baseDir: string): Promise<void> => {
+  const processAllFilesCore = async (baseDir?: string): Promise<void> => {
     try {
       // Convert to ElectronBridgeOptions with baseDir from Vite
-      const bridgeOptions: ElectronBridgeOptions & { sourceFiles?: string[] } = {
-        outputDirs: options.outputDirs,
+      const bridgeOptions: ElectronBridgeOptions = {
+        mainProcessHandlerFile: options.mainProcessHandlerFile,
+        preloadHandlerFile: options.preloadHandlerFile,
         typeDefinitionsFile: options.typeDefinitionsFile,
         defaultNamespace: options.defaultNamespace,
         logger,
-        baseDir,
-        sourceFiles: options.sourceFiles
+        baseDir
       };
 
       // 1. Collect source files from directories
-      const sourceFiles = await collectSourceFiles(bridgeOptions);
-      
+      const sourceFiles = options.sourceFiles ??
+        await collectSourceFiles(bridgeOptions);
       if (sourceFiles.length === 0) {
         return;
       }
-      
+
       // 2. Process all files in batch
       if (options.enableWorker ?? true) {
         await processBatchOnWorker(logger, bridgeOptions, sourceFiles);
@@ -185,14 +174,49 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     }
   };
 
-  let baseDir = process.cwd();
+  let isRunning = false;
+  let awaitingDeferred: Deferred<void> | undefined;
+  const processAllFiles = async (baseDir?: string): Promise<void> => {
+    // Is awaiting last demand?
+    if (awaitingDeferred) {
+      // Early Completion: Complete the last minute wait here.
+      // The last call appears to be completed, but is actually still ongoing.
+      const ad = awaitingDeferred ;
+      awaitingDeferred = undefined;
+      ad.resolve();
+    }
+    // Is running current processing?
+    if (isRunning) {
+      // Reserve this demand.
+      awaitingDeferred = createDeferred();
+      return awaitingDeferred.promise;
+    }
+
+    isRunning = true;
+    try {
+      await processAllFilesCore(baseDir);
+    } catch (error: unknown) {
+      isRunning = false;
+      const ad = awaitingDeferred as Deferred<void> | undefined;
+      awaitingDeferred = undefined;
+      ad?.reject(error);
+      return;
+    }
+
+    isRunning = false;
+    const ad = awaitingDeferred as Deferred<void> | undefined;
+    awaitingDeferred = undefined;
+    ad?.resolve();
+  }
+
+  let baseDir: string | undefined;
   
   return {
     name: 'sublimity-electron-bridge',
-    configResolved: async config => {
+    configResolved: config => {
       // Get base directory from Vite config
-      baseDir = config.root || process.cwd();
-      await processAllFiles(baseDir);
+      baseDir = config.root;
+      return processAllFiles(baseDir);
     },
     buildStart: () => {
       // Process all files at build start

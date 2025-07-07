@@ -14,7 +14,8 @@ const logger = {
 };
 
 const generator = createElectronBridgeGenerator({
-  outputDirs: workerData.options.outputDirs,
+  mainProcessHandlerFile: workerData.options.mainProcessHandlerFile,
+  preloadHandlerFile: workerData.options.preloadHandlerFile,
   typeDefinitionsFile: workerData.options.typeDefinitionsFile,
   defaultNamespace: workerData.options.defaultNamespace,
   baseDir: workerData.options.baseDir,

@@ -235,20 +235,21 @@ const atomicWriteFileSync = (filePath: string, content: string): void => {
 /**
  * Check if a file is generated
  * @param filePath - The path to the file
- * @param outputDirs - The output directories
+ * @param mainProcessHandlerFile - The main process handler file
+ * @param preloadHandlerFile - The preload handler file
  * @param typeDefinitionsFile - The type definitions file
  * @returns Whether the file is generated
  */
-const isGeneratedFile = (filePath: string, outputDirs: { main?: string; preload?: string }, typeDefinitionsFile?: string): boolean => {
+const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, preloadHandlerFile?: string, typeDefinitionsFile?: string): boolean => {
   const normalizedPath = filePath.replace(/\\/g, '/');
   
-  // Check if file is in main output directory
-  if (outputDirs.main && normalizedPath.includes(outputDirs.main.replace(/\\/g, '/'))) {
+  // Check if file is the main process handler file
+  if (mainProcessHandlerFile && normalizedPath.includes(mainProcessHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
   
-  // Check if file is in preload output directory
-  if (outputDirs.preload && normalizedPath.includes(outputDirs.preload.replace(/\\/g, '/'))) {
+  // Check if file is the preload handler file
+  if (preloadHandlerFile && normalizedPath.includes(preloadHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
   
@@ -270,14 +271,12 @@ export const createElectronBridgeGenerator =
 
   // Makes default values for the options
   const _options = {
-    outputDirs: {
-      main: options.outputDirs?.main || 'src/main/generated',
-      preload: options.outputDirs?.preload || 'src/preload/generated'
-    },
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/electron-api.d.ts',
-    defaultNamespace: options.defaultNamespace || 'electronAPI',
+    mainProcessHandlerFile: options.mainProcessHandlerFile || 'src/main/generated/seb_main.ts',
+    preloadHandlerFile: options.preloadHandlerFile || 'src/preload/generated/seb_preload.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.d.ts',
+    defaultNamespace: options.defaultNamespace || 'mainProcess',
     logger: options.logger ?? createConsoleLogger(),
-    baseDir: options.baseDir
+    baseDir: options.baseDir || process.cwd()
   };
 
   /**
@@ -288,7 +287,7 @@ export const createElectronBridgeGenerator =
    */
   const analyzeFile = (filePath: string, code: string): ExposedMethod[] => {
     // Skip generated files to avoid analysis loops
-    if (isGeneratedFile(filePath, _options.outputDirs, _options.typeDefinitionsFile)) {
+    if (isGeneratedFile(filePath, _options.mainProcessHandlerFile, _options.preloadHandlerFile, _options.typeDefinitionsFile)) {
       return [];
     }
 
@@ -314,25 +313,31 @@ export const createElectronBridgeGenerator =
     // Sort methods by namespace to ensure deterministic order
     const namespaceGroups = groupMethodsByNamespace(methods);
 
+    // Resolve file paths relative to baseDir
+    const resolveOutputPath = (filePath: string): string => {
+      return resolve(_options.baseDir!, filePath);
+    };
+
     // Generate main handlers
-    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, _options.outputDirs.main);
-    const mainFilePath = resolve(_options.outputDirs!.main!, 'ipc-handlers.ts');
+    const mainFilePath = resolveOutputPath(_options.mainProcessHandlerFile);
+    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, dirname(mainFilePath));
     atomicWriteFileSync(mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
+    const preloadFilePath = resolveOutputPath(_options.preloadHandlerFile);
     const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
-    const preloadFilePath = resolve(_options.outputDirs!.preload!, 'bridge.ts');
     atomicWriteFileSync(preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
+    const typeDefsFilePath = resolveOutputPath(_options.typeDefinitionsFile!);
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
-    atomicWriteFileSync(_options.typeDefinitionsFile!, typeDefsCode);
+    atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
 
-    _options.logger.trace(`[electron-bridge] Generated files:`);
-    _options.logger.trace(`  - ${mainFilePath}`);
-    _options.logger.trace(`  - ${preloadFilePath}`);
-    _options.logger.trace(`  - ${_options.typeDefinitionsFile}`);
-    _options.logger.trace(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+    _options.logger.info(`[electron-bridge] Generated files:`);
+    _options.logger.info(`  - ${mainFilePath}`);
+    _options.logger.info(`  - ${preloadFilePath}`);
+    _options.logger.info(`  - ${typeDefsFilePath}`);
+    _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
   }
 
   // Returns the generator
