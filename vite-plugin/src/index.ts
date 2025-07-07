@@ -97,11 +97,22 @@ const processBatchOnWorker = (logger: Logger, options: SublimityElectronBridgeOp
 
 ///////////////////////////////////////////////////////////////////////
 
-export interface SublimityElectronBridgeOptions extends ElectronBridgeOptions {
+/**
+ * Sublimity Electron Bridge Vite plugin options
+ */
+export interface SublimityElectronBridgeVitePluginOptions extends ElectronBridgeOptions {
+  /**
+   * Whether to enable the worker for processing files (Default: true)
+   */
   enableWorker?: boolean;
 }
 
-export const sublimityElectronBridge = (options: SublimityElectronBridgeOptions = {}): Plugin => {
+/**
+ * Sublimity Electron Bridge Vite plugin
+ * @param options - The options for the plugin
+ * @returns The plugin
+ */
+export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePluginOptions = {}): Plugin => {
   const logger = options.logger ?? createConsoleLogger();
 
   const processAllFiles = async (): Promise<void> => {
@@ -114,7 +125,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeOptions 
       }
       
       // 2. Process all files in batch
-      if (options.enableWorker) {
+      if (options.enableWorker ?? true) {
         await processBatchOnWorker(logger, options, sourceFiles);
       } else {
         await processBatchDirectly(logger, options, sourceFiles);
@@ -126,24 +137,11 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeOptions 
 
   return {
     name: 'sublimity-electron-bridge',
-    configResolved: async () => {
-      // Do nothing here (processing is done in buildStart)
-    },
-    buildStart: async () => {
+    buildStart: () => {
       // Process all files at build start
-      await processAllFiles();
+      return processAllFiles();
     },
-    transform: async (code, id) => {
-      // File generation is already completed, just return the code
-      return {
-        code,
-        map: null
-      };
-    },
-    buildEnd: async () => {
-      // Do nothing here (already processed)
-    },
-    handleHotUpdate: async (ctx) => {
+    handleHotUpdate: async ctx => {
       // Re-process all files on hot update
       await processAllFiles();
       return [];
