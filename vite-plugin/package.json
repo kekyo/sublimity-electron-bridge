@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.7.3",
+  "version": "0.8.1",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
     "type": "git",
@@ -20,7 +20,16 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "exports": {
-    "./worker": "./dist/worker.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.mjs",
+      "require": "./dist/worker.js"
+    }
   },
   "files": [
     "dist",
