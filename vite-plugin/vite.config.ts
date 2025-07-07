@@ -18,9 +18,5 @@ export default defineConfig({
     rollupOptions: {
       external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'url']
     }
-  },
-  test: {
-    globals: true,
-    environment: 'node'
   }
 });
