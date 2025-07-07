@@ -4,6 +4,7 @@ import { writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { Logger, ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
+import { createConsoleLogger } from '.';
 
 /**
  * Group methods by namespace
@@ -273,9 +274,9 @@ export const createElectronBridgeGenerator =
       main: options.outputDirs?.main || 'src/main/generated',
       preload: options.outputDirs?.preload || 'src/preload/generated'
     },
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/generated/electron-api.d.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/electron-api.d.ts',
     defaultNamespace: options.defaultNamespace || 'electronAPI',
-    logger: options.logger || { info: console.info, warn: console.warn, error: console.error },
+    logger: options.logger ?? createConsoleLogger(),
     baseDir: options.baseDir
   };
 
@@ -327,11 +328,11 @@ export const createElectronBridgeGenerator =
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
     atomicWriteFileSync(_options.typeDefinitionsFile!, typeDefsCode);
 
-    _options.logger.info(`[electron-bridge] Generated files:`);
-    _options.logger.info(`  - ${mainFilePath}`);
-    _options.logger.info(`  - ${preloadFilePath}`);
-    _options.logger.info(`  - ${_options.typeDefinitionsFile}`);
-    _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+    _options.logger.trace(`[electron-bridge] Generated files:`);
+    _options.logger.trace(`  - ${mainFilePath}`);
+    _options.logger.trace(`  - ${preloadFilePath}`);
+    _options.logger.trace(`  - ${_options.typeDefinitionsFile}`);
+    _options.logger.trace(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
   }
 
   // Returns the generator

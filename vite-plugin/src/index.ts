@@ -88,6 +88,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 
     worker.on('message', ({type, message}) => {
       switch (type) {
+        case 'trace': logger.trace(message);
         case 'info': logger.info(message);
         case 'warn': logger.warn(message);
         default: logger.error(message);
@@ -128,7 +129,7 @@ export interface SublimityElectronBridgeVitePluginOptions {
   };
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/generated/electron-api.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/electron-api.d.ts'
    */
   typeDefinitionsFile?: string;
   /**
@@ -188,9 +189,10 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
   
   return {
     name: 'sublimity-electron-bridge',
-    configResolved(config) {
+    configResolved: async config => {
       // Get base directory from Vite config
       baseDir = config.root || process.cwd();
+      await processAllFiles(baseDir);
     },
     buildStart: () => {
       // Process all files at build start

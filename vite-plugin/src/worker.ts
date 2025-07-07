@@ -7,6 +7,7 @@ if (!parentPort) {
 }
 
 const logger = {
+  trace: (message: string) => parentPort!.postMessage({ type: 'trace', message }),
   info: (message: string) => parentPort!.postMessage({ type: 'info', message }),
   warn: (message: string) => parentPort!.postMessage({ type: 'warn', message }),
   error: (message: string) => parentPort!.postMessage({ type: 'error', message }),

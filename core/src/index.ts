@@ -9,6 +9,7 @@ export { createElectronBridgeGenerator } from './generator';
  */
 export const createConsoleLogger = () : Logger => {
   return {
+    trace: console.trace,
     info: console.info,
     warn: console.warn,
     error: console.error
