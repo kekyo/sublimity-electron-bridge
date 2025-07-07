@@ -6,14 +6,17 @@ export default defineConfig({
   plugins: [dts()],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        worker: resolve(__dirname, 'src/worker.js')
+      },
       name: 'SublimityElectronBridgeVitePlugin',
-      fileName: 'index',
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'js'}`,
       formats: ['es', 'cjs']
     },
     target: 'node14',
     rollupOptions: {
-      external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'sublimity-electron-bridge-core']
+      external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'url']
     }
   },
   test: {

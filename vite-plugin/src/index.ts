@@ -1,9 +1,10 @@
 import type { Plugin } from 'vite'
 import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, Logger } from 'sublimity-electron-bridge-core'
 import { Worker } from 'worker_threads'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { promises as fs } from 'fs'
 import { glob } from 'glob'
+import { fileURLToPath } from 'url'
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -64,7 +65,9 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
 
 const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
   return new Promise(resolve => {
-    const worker = new Worker(join(__dirname, 'worker.js'), {
+    // Get the directory of the current module
+    const currentDir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
+    const worker = new Worker(join(currentDir, 'worker.js'), {
       workerData: {
         options: {
           outputDirs: options.outputDirs,
@@ -141,7 +144,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       // Process all files at build start
       return processAllFiles();
     },
-    handleHotUpdate: async ctx => {
+    handleHotUpdate: async () => {
       // Re-process all files on hot update
       await processAllFiles();
       return [];
