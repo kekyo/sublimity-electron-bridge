@@ -15,7 +15,10 @@
     "rootDir": "src",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "sublimity-electron-bridge-core": ["../core/src/index.ts"]
+    }
   },
   "include": [
     "src/**/*"

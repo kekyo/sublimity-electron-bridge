@@ -21,7 +21,7 @@ export default defineConfig({
     },
     target: 'node14',
     rollupOptions: {
-      external: ['commander', 'glob', 'fs', 'path', 'typescript', 'crypto', 'sublimity-electron-bridge-core']
+      external: ['commander', 'glob', 'fs', 'path', 'typescript', 'crypto']
     }
   }
 });
