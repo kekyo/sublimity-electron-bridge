@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
+import { createElectronBridgeGenerator, createConsoleLogger } from '../../core/src/index.ts';
 import { promises as fs } from 'fs';
 
 // Version is injected at build time by Vite

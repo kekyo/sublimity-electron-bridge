@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { sublimityElectronBridge } from './index'
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -10,7 +10,11 @@ describe('SublimityElectronBridge Vite Plugin', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'vite-plugin-test-'));
-    testFixturesDir = join(__dirname, 'test-fixtures');
+    testFixturesDir = join(tempDir, 'test-fixtures');
+    
+    // Copy test fixtures to temp directory
+    const sourceFixtures = join(__dirname, 'test-fixtures');
+    cpSync(sourceFixtures, testFixturesDir, { recursive: true });
   });
 
   afterEach(() => {
@@ -32,8 +36,18 @@ describe('SublimityElectronBridge Vite Plugin', () => {
         main: join(tempDir, 'main'),
         preload: join(tempDir, 'preload')
       },
-      typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts')
+      typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts'),
+      sourceFiles: [
+        join(testFixturesDir, 'FileService.ts'),
+        join(testFixturesDir, 'database.ts')
+      ]
     });
+
+    // Mock configResolved to set baseDir to temp directory
+    const configResolved = plugin.configResolved as Function;
+    if (configResolved) {
+      configResolved.call(plugin, { root: tempDir });
+    }
 
     const mockContext = {
       resolve: (id: string) => Promise.resolve({ id }),
@@ -56,10 +70,10 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     // Main handlers file (based on actual output order)
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
     const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { FileService } from '${testFixturesDir}/FileService'
-import { executeCommand } from '${testFixturesDir}/database'
-import { getVersion } from '${testFixturesDir}/database'
-import { queryDatabase } from '${testFixturesDir}/database'
+import { FileService } from '../test-fixtures/FileService'
+import { executeCommand } from '../test-fixtures/database'
+import { getVersion } from '../test-fixtures/database'
+import { queryDatabase } from '../test-fixtures/database'
 
 // Create singleton instances
 const fileserviceInstance = new FileService()
@@ -128,8 +142,18 @@ export {}`;
         preload: join(tempDir, 'preload')
       },
       typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts'),
-      enableWorker: true
+      enableWorker: true,
+      sourceFiles: [
+        join(testFixturesDir, 'FileService.ts'),
+        join(testFixturesDir, 'database.ts')
+      ]
     });
+
+    // Mock configResolved to set baseDir to temp directory
+    const configResolved = plugin.configResolved as Function;
+    if (configResolved) {
+      configResolved.call(plugin, { root: tempDir });
+    }
 
     const mockContext = {
       resolve: (id: string) => Promise.resolve({ id }),
@@ -152,10 +176,10 @@ export {}`;
     // Main handlers file
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
     const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { FileService } from '${testFixturesDir}/FileService'
-import { executeCommand } from '${testFixturesDir}/database'
-import { getVersion } from '${testFixturesDir}/database'
-import { queryDatabase } from '${testFixturesDir}/database'
+import { FileService } from '../test-fixtures/FileService'
+import { executeCommand } from '../test-fixtures/database'
+import { getVersion } from '../test-fixtures/database'
+import { queryDatabase } from '../test-fixtures/database'
 
 // Create singleton instances
 const fileserviceInstance = new FileService()

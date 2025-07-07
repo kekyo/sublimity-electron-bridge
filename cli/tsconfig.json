@@ -12,13 +12,9 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "rootDir": "src",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "sublimity-electron-bridge-core": ["../core/src/index.ts"]
-    }
+    "forceConsistentCasingInFileNames": true
   },
   "include": [
     "src/**/*"
