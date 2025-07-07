@@ -7,7 +7,7 @@ import { glob } from 'glob'
 
 ///////////////////////////////////////////////////////////////////////
 
-const collectSourceFiles = async (options: SublimityElectronBridgeOptions): Promise<string[]> => {
+const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
   // Default source patterns
   const defaultPatterns = [
     'src/**/*.ts',
@@ -37,7 +37,7 @@ const collectSourceFiles = async (options: SublimityElectronBridgeOptions): Prom
   return [...new Set(allFiles)];
 };
 
-const processBatchDirectly = async (logger: Logger, options: SublimityElectronBridgeOptions, filePaths: string[]): Promise<void> => {
+const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
   const generator = createElectronBridgeGenerator(options);
   
   // Read and analyze all files in parallel
@@ -62,7 +62,7 @@ const processBatchDirectly = async (logger: Logger, options: SublimityElectronBr
   }
 };
 
-const processBatchOnWorker = (logger: Logger, options: SublimityElectronBridgeOptions, filePaths: string[]): Promise<void> => {
+const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
   return new Promise(resolve => {
     const worker = new Worker(join(__dirname, 'worker.js'), {
       workerData: {

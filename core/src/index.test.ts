@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as ts from 'typescript';
-import { createConsoleLogger, createElectronBridgeGenerator, extractExposedMethods, isCamelCase, toPascalCase } from './index';
+import { createConsoleLogger, createElectronBridgeGenerator } from './index';
+import { extractExposedMethods, isCamelCase, toPascalCase } from './visitor';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';

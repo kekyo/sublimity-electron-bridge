@@ -7,8 +7,10 @@ import { promises as fs } from 'fs';
 // Version is injected at build time by Vite
 declare const __VERSION__: string;
 
+// Create the program
 const program = new Command();
 
+// Add the name and version
 program
   .name('seb')
   .version(__VERSION__)
@@ -19,6 +21,7 @@ Repository: https://github.com/kekyo/sublimity-electron-bridge
 License: MIT
 `);
 
+// Add the generate command
 program
   .command('generate')
   .description('Generate bridge files from TypeScript source files')
@@ -29,6 +32,15 @@ program
   .option('-n, --namespace <name>', 'Default namespace', 'electronAPI')
   .action(async (files, options) => {
     try {
+      // Check if no files are specified
+      if (files.length === 0) {
+        console.warn('No files specified to analyze');
+        return;
+      }
+
+      console.log(`Found ${files.length} files to analyze...`);
+
+      // Create the generator
       const generator = createElectronBridgeGenerator({
         outputDirs: {
           main: options.main,
@@ -39,13 +51,6 @@ program
         logger: createConsoleLogger()
       });
 
-      if (files.length === 0) {
-        console.log('No files specified to analyze');
-        return;
-      }
-
-      console.log(`Found ${files.length} files to analyze...`);
-      
       // Read and analyze all files in parallel
       const analysisPromises = files.map(async (file: string) => {
         try {
@@ -71,4 +76,5 @@ program
     }
   });
 
+// Parse the arguments
 program.parse();
