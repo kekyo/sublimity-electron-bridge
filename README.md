@@ -1,5 +1,10 @@
 # Sublimity Electron IPC Bridge
 
+An automated code generation tool for Electron applications that eliminates the need for manual IPC (Inter-Process Communication) setup between the main process and renderer process. 
+
+## Status
+
+[![Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 |Package|Link|
@@ -7,20 +12,40 @@
 |npm CLI|[![npm CLI](https://badge.fury.io/js/sublimity-electron-bridge-cli.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-cli)|
 |npm Vite plugin|[![npm vite-plugin](https://badge.fury.io/js/sublimity-electron-bridge-vite.svg)](https://www.npmjs.com/package/sublimity-electron-bridge-vite)|
 
-An automated code generation tool for Electron applications that eliminates the need for manual IPC (Inter-Process Communication) setup between the main process and renderer process. This tool analyzes TypeScript source code using the TypeScript Compiler API and automatically generates the necessary IPC handlers, preload bridge scripts, and type definitions.
+-----
 
 ## Overview
 
-Sublimity Electron IPC Bridge targets Electron applications built with TypeScript. It automates the traditionally manual and error-prone process of setting up IPC communication by:
+Sublimity Electron IPC Bridge targets Electron applications built with TypeScript. It automates the traditionally manual and error-prone process of setting up IPC communication.
+This tool analyzes TypeScript source code using the TypeScript Compiler API and automatically generates the necessary IPC handlers, preload bridge scripts, and type definitions.
 
-- **Analyzing** TypeScript source code for methods marked with `@decorator expose` JSDoc tags
-- **Generating** main process IPC handlers automatically
-- **Creating** preload bridge scripts for secure communication
-- **Providing** complete TypeScript type definitions for the renderer process
+### Short example
 
-The tool supports class methods, standalone functions, and arrow functions with variable binding, with automatic validation of camelCase naming conventions and Promise return types.
+We want to expose main process function to render process, add JSDoc `@decorator expose`:
 
-### Generated Output Structure
+```typescript
+/**
+ * Get system information in Electron main process.
+ * "Decorator" makes to expose this function to render process automatically.
+ * @decorator expose fileAPI
+ */
+export async function getSystemInfo(): Promise<SystemInfo> {
+  return {
+    platform: process.platform,
+    version: process.version,
+    arch: process.arch
+  }
+}
+```
+
+Then it is generated automatically preloader function and type-safe interface,
+and we can access it from render proces naturally:
+
+```typescript
+// Renderer process with full type safety
+const systemInfo = await window.fileAPI.getSystemInfo();
+console.log(`Running on ${systemInfo.platform}`);
+```
 
 Using this tool, the following source code will be automatically generated:
 
@@ -35,21 +60,6 @@ project/
 ```
 
 For more information, see below section.
-
-## Target Audience
-
-This tool is designed for:
-
-- **Electron developers** using TypeScript who want to streamline IPC setup
-- **Development teams** seeking to reduce boilerplate code and potential IPC-related bugs
-- **Projects** requiring type-safe communication between Electron processes
-- **Applications** that need organized namespace-based API exposure to the renderer
-
-## Requirements
-
-- **Node.js** 14 or higher
-- **TypeScript** 5.0 or higher
-- **Electron** application with preload scripts enabled
 
 -----
 
@@ -104,21 +114,30 @@ npm install --save-dev sublimity-electron-bridge-vite
 Add the plugin to your `vite.config.ts`:
 
 ```typescript
-import { defineConfig } from 'vite'
-import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite'
+import { defineConfig } from 'vite';
+import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite';
 
 export default defineConfig({
   plugins: [
-    sublimityElectronBridge({
-      outputDirs: {
-        main: 'main/generated',
-        preload: 'preload/generated'
-      },
-      typeDefinitionsFile: 'src/generated/electron-api.d.ts',
-      defaultNamespace: 'electronAPI'
-    })
+    sublimityElectronBridge()   // The plugin
   ]
-})
+});
+```
+
+Or you use with electron-vite `electron.vite.config.ts`:
+
+```typescript
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
+import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite';
+
+export default defineConfig({
+  main: {   // NOTE: We have to place the plugin into `main` process.
+    plugins: [
+      externalizeDepsPlugin(),
+      sublimityElectronBridge()   // The plugin
+    ]
+  }
+});
 ```
 
 #### Plugin Options
@@ -131,13 +150,17 @@ interface SublimityElectronBridgeOptions {
   }
   typeDefinitionsFile?: string  // Default: "src/generated/electron-api.d.ts"
   defaultNamespace?: string     // Default: "electronAPI"
-  enableWorker?: boolean        // Default: false - Enable worker thread processing
+  enableWorker?: boolean        // Default: true - Enable worker thread processing
 }
 ```
 
 -----
 
 ## Code Example
+
+The JSDoc decorator is specified by `@decorator expose`.
+You can also specify the name of the object to be placed as an optional argument `@decorator expose <objectName>`.
+Default object name is `electronAPI`.
 
 ### Source Code with Decorators
 
