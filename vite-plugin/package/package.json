@@ -20,8 +20,7 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "!dist/**/test-fixtures"
+    "dist"
   ],
   "scripts": {
     "build": "rv --npm . && npm i && vite build",
