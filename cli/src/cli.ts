@@ -4,12 +4,20 @@ import { Command } from 'commander';
 import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
 import { promises as fs } from 'fs';
 
+// Version is injected at build time by Vite
+declare const __VERSION__: string;
+
 const program = new Command();
 
 program
-  .name('electron-bridge')
-  .description('Generate Electron IPC bridge code from TypeScript decorators')
-  .version('1.0.0');   // TODO:
+  .name('seb')
+  .version(__VERSION__)
+  .description(`Sublimity Electron IPC bridge code from TypeScript decorators ${__VERSION__}`)
+  .addHelpText('after', `
+Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
+Repository: https://github.com/kekyo/sublimity-electron-bridge
+License: MIT
+`);
 
 program
   .command('generate')
