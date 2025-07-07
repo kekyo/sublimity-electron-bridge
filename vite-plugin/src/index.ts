@@ -1,10 +1,9 @@
 import type { Plugin } from 'vite';
 import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, type Logger } from '../../core/src/index.ts';
 import { Worker } from 'worker_threads';
-import { join, dirname } from 'path';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
-import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -67,9 +66,15 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
 
 const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
   return new Promise(resolve => {
-    // Get the directory of the current module
-    const currentDir = typeof __dirname !== 'undefined' ? __dirname : dirname(fileURLToPath(import.meta.url));
-    const worker = new Worker(join(currentDir, 'worker.js'), {
+    // Use createRequire to resolve the worker module (worker.ts --> worker.js) universally.
+    // In "package.json":
+    // "exports": {
+    //   "./worker": "./dist/worker.js"
+    // },
+    // require.resolve() will resolve by the package.json "exports" declaration.
+    const require = createRequire(import.meta.url);
+    const workerPath = require.resolve('sublimity-electron-bridge-vite/worker');
+    const worker = new Worker(workerPath, {
       workerData: {
         options: {
           outputDirs: options.outputDirs,
@@ -112,12 +117,12 @@ export interface SublimityElectronBridgeVitePluginOptions {
   outputDirs?: {
     /**
      * The output directory for the main process
-     * @remarks Default: 'main/generated'
+     * @remarks Default: 'src/main/generated'
      */
     main?: string
     /**
      * The output directory for the preload process
-     * @remarks Default: 'preload/generated'
+     * @remarks Default: 'src/preload/generated'
      */
     preload?: string
   };

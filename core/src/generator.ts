@@ -270,8 +270,8 @@ export const createElectronBridgeGenerator =
   // Makes default values for the options
   const _options = {
     outputDirs: {
-      main: options.outputDirs?.main || 'main/generated',
-      preload: options.outputDirs?.preload || 'preload/generated'
+      main: options.outputDirs?.main || 'src/main/generated',
+      preload: options.outputDirs?.preload || 'src/preload/generated'
     },
     typeDefinitionsFile: options.typeDefinitionsFile || 'src/generated/electron-api.d.ts',
     defaultNamespace: options.defaultNamespace || 'electronAPI',

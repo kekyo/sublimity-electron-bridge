@@ -29,12 +29,12 @@ export interface ElectronBridgeOptions {
   outputDirs?: {
     /**
      * The output directory for the main process
-     * @remarks Default: 'main/generated'
+     * @remarks Default: 'src/main/generated'
      */
     main?: string
     /**
      * The output directory for the preload process
-     * @remarks Default: 'preload/generated'
+     * @remarks Default: 'src/preload/generated'
      */
     preload?: string
   };

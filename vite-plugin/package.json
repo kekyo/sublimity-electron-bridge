@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.6.3",
+  "version": "0.7.3",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
     "type": "git",
@@ -19,6 +19,9 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    "./worker": "./dist/worker.js"
+  },
   "files": [
     "dist",
     "!dist/**/test-fixtures"
@@ -26,7 +29,7 @@
   "scripts": {
     "build": "rv --npm . && npm i && vite build",
     "dev": "rv --npm . && npm i && vite build --watch",
-    "test": "rv --npm . && npm i && vitest run",
+    "test": "rv --npm . && npm i && npm run build && vitest run",
     "test:ui": "rv --npm . && npm i && vitest --ui",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
