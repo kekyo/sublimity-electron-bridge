@@ -1,17 +1,15 @@
-const { parentPort, workerData } = require('worker_threads')
-const fs = require('fs').promises
+import { parentPort, workerData } from 'worker_threads';
+import { promises as fs } from 'fs';
+import { createElectronBridgeGenerator } from '../../core/src/index.ts';
 
 if (!parentPort) {
   throw new Error('parentPort is not available');
 }
 
-const coreModule = require('sublimity-electron-bridge-core');
-const createElectronBridgeGenerator = coreModule.createElectronBridgeGenerator;
-
 const logger = {
-  info: (message) => parentPort.postMessage({ type: 'info', message }),
-  warn: (message) => parentPort.postMessage({ type: 'warn', message }),
-  error: (message) => parentPort.postMessage({ type: 'error', message }),
+  info: (message: string) => parentPort!.postMessage({ type: 'info', message }),
+  warn: (message: string) => parentPort!.postMessage({ type: 'warn', message }),
+  error: (message: string) => parentPort!.postMessage({ type: 'error', message }),
 };
 
 const generator = createElectronBridgeGenerator({
@@ -24,7 +22,7 @@ const generator = createElectronBridgeGenerator({
 
 async function processBatch() {
   // Read and analyze all files in parallel
-  const analysisPromises = workerData.filePaths.map(async (filePath) => {
+  const analysisPromises = workerData.filePaths.map(async (filePath: string) => {
     try {
       await fs.access(filePath); // Check file existence
       const code = await fs.readFile(filePath, 'utf-8');
