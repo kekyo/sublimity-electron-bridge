@@ -1,14 +1,19 @@
-import type { Plugin } from 'vite'
-import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, Logger } from 'sublimity-electron-bridge-core'
-import { Worker } from 'worker_threads'
-import { join, dirname } from 'path'
-import { promises as fs } from 'fs'
-import { glob } from 'glob'
-import { fileURLToPath } from 'url'
+import type { Plugin } from 'vite';
+import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, type Logger } from '../../core/src/index.ts';
+import { Worker } from 'worker_threads';
+import { join, dirname } from 'path';
+import { promises as fs } from 'fs';
+import { glob } from 'glob';
+import { fileURLToPath } from 'url';
 
 ///////////////////////////////////////////////////////////////////////
 
-const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
+const collectSourceFiles = async (options: ElectronBridgeOptions & { sourceFiles?: string[] }): Promise<string[]> => {
+  // If sourceFiles are explicitly provided, use them
+  if (options.sourceFiles) {
+    return options.sourceFiles;
+  }
+
   // Default source patterns
   const defaultPatterns = [
     'src/**/*.ts',
@@ -17,12 +22,9 @@ const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<strin
     'lib/**/*.tsx'
   ];
   
-  // Get source patterns from options (for future extension)
-  const patterns = (options as any).sourcePatterns || defaultPatterns;
-  
   const allFiles: string[] = [];
   
-  for (const pattern of patterns) {
+  for (const pattern of defaultPatterns) {
     try {
       const files = await glob(pattern, { 
         ignore: ['**/node_modules/**', '**/dist/**', '**/*.d.ts'],
@@ -103,11 +105,40 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 /**
  * Sublimity Electron Bridge Vite plugin options
  */
-export interface SublimityElectronBridgeVitePluginOptions extends ElectronBridgeOptions {
+export interface SublimityElectronBridgeVitePluginOptions {
+  /**
+   * The output directories for the generated files
+   */
+  outputDirs?: {
+    /**
+     * The output directory for the main process
+     * @remarks Default: 'main/generated'
+     */
+    main?: string
+    /**
+     * The output directory for the preload process
+     * @remarks Default: 'preload/generated'
+     */
+    preload?: string
+  };
+  /**
+   * The file name for the type definitions
+   * @remarks Default: 'src/generated/electron-api.d.ts'
+   */
+  typeDefinitionsFile?: string;
+  /**
+   * The default namespace for the exposed methods
+   * @remarks Default: 'electronAPI'
+   */
+  defaultNamespace?: string;
   /**
    * Whether to enable the worker for processing files (Default: true)
    */
   enableWorker?: boolean;
+  /**
+   * Source files to analyze (Default: auto-discovery with patterns)
+   */
+  sourceFiles?: string[];
 }
 
 /**
@@ -116,12 +147,22 @@ export interface SublimityElectronBridgeVitePluginOptions extends ElectronBridge
  * @returns The plugin
  */
 export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePluginOptions = {}): Plugin => {
-  const logger = options.logger ?? createConsoleLogger();
+  const logger = createConsoleLogger();
 
-  const processAllFiles = async (): Promise<void> => {
+  const processAllFiles = async (baseDir: string): Promise<void> => {
     try {
+      // Convert to ElectronBridgeOptions with baseDir from Vite
+      const bridgeOptions: ElectronBridgeOptions & { sourceFiles?: string[] } = {
+        outputDirs: options.outputDirs,
+        typeDefinitionsFile: options.typeDefinitionsFile,
+        defaultNamespace: options.defaultNamespace,
+        logger,
+        baseDir,
+        sourceFiles: options.sourceFiles
+      };
+
       // 1. Collect source files from directories
-      const sourceFiles = await collectSourceFiles(options);
+      const sourceFiles = await collectSourceFiles(bridgeOptions);
       
       if (sourceFiles.length === 0) {
         return;
@@ -129,24 +170,30 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       
       // 2. Process all files in batch
       if (options.enableWorker ?? true) {
-        await processBatchOnWorker(logger, options, sourceFiles);
+        await processBatchOnWorker(logger, bridgeOptions, sourceFiles);
       } else {
-        await processBatchDirectly(logger, options, sourceFiles);
+        await processBatchDirectly(logger, bridgeOptions, sourceFiles);
       }
     } catch (error) {
       logger.warn(`[electron-bridge] Error in processAllFiles: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
+  let baseDir = process.cwd();
+  
   return {
     name: 'sublimity-electron-bridge',
+    configResolved(config) {
+      // Get base directory from Vite config
+      baseDir = config.root || process.cwd();
+    },
     buildStart: () => {
       // Process all files at build start
-      return processAllFiles();
+      return processAllFiles(baseDir);
     },
     handleHotUpdate: async () => {
       // Re-process all files on hot update
-      await processAllFiles();
+      await processAllFiles(baseDir);
       return [];
     }
   };
