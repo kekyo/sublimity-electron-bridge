@@ -3,6 +3,11 @@
  */
 export interface Logger {
   /**
+   * Log an trace message
+   * @param msg - The message to log
+   */
+  readonly trace: (msg: string) => void;
+  /**
    * Log an info message
    * @param msg - The message to log
    */
@@ -24,28 +29,23 @@ export interface Logger {
  */
 export interface ElectronBridgeOptions {
   /**
-   * The output directories for the generated files
+   * The output file path for the main process handlers
+   * @remarks Default: 'src/main/generated/seb_main.ts'
    */
-  outputDirs?: {
-    /**
-     * The output directory for the main process
-     * @remarks Default: 'src/main/generated'
-     */
-    main?: string
-    /**
-     * The output directory for the preload process
-     * @remarks Default: 'src/preload/generated'
-     */
-    preload?: string
-  };
+  mainProcessHandlerFile?: string;
+  /**
+   * The output file path for the preload handlers
+   * @remarks Default: 'src/preload/generated/seb_preload.ts'
+   */
+  preloadHandlerFile?: string;
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/generated/electron-api.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/seb_types.d.ts'
    */
   typeDefinitionsFile?: string;
   /**
    * The default namespace for the exposed methods
-   * @remarks Default: 'electronAPI'
+   * @remarks Default: 'mainProcess'
    */
   defaultNamespace?: string;
   /**

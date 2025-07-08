@@ -26,10 +26,11 @@ program
   .command('generate')
   .description('Generate bridge files from TypeScript source files')
   .argument('<files...>', 'TypeScript source files to analyze')
-  .option('-m, --main <dir>', 'Main process output directory', 'main/generated')
-  .option('-p, --preload <dir>', 'Preload script output directory', 'preload/generated')
-  .option('-t, --types <file>', 'Type definitions output file', 'src/generated/electron-api.d.ts')
-  .option('-n, --namespace <name>', 'Default namespace', 'electronAPI')
+  .option('-b, --baseDir <path>', 'Project base directory path')
+  .option('-m, --main <file>', 'Main process output file', 'src/main/generated/seb_main.ts')
+  .option('-p, --preload <file>', 'Preload script output file', 'src/preload/generated/seb_preload.ts')
+  .option('-t, --types <file>', 'Type definitions output file', 'src/renderer/src/generated/seb_types.d.ts')
+  .option('-n, --namespace <name>', 'Default namespace', 'mainProcess')
   .action(async (files, options) => {
     try {
       // Check if no files are specified
@@ -42,13 +43,12 @@ program
 
       // Create the generator
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: options.main,
-          preload: options.preload
-        },
+        mainProcessHandlerFile: options.main,
+        preloadHandlerFile: options.preload,
         typeDefinitionsFile: options.types,
         defaultNamespace: options.namespace,
-        logger: createConsoleLogger()
+        logger: createConsoleLogger(),
+        baseDir: options.baseDir
       });
 
       // Read and analyze all files in parallel

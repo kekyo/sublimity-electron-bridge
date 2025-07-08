@@ -19,10 +19,8 @@ describe('ElectronBridgeCore', () => {
   describe('ElectronBridgeGenerator', () => {
     it('should create generator with default options', () => {
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: join(testOutputDir, 'default-main'),
-          preload: join(testOutputDir, 'default-preload')
-        },
+        mainProcessHandlerFile: join(testOutputDir, 'default-main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join(testOutputDir, 'default-preload', 'bridge.ts'),
         typeDefinitionsFile: join(testOutputDir, 'default-types.d.ts')
       });
       
@@ -31,10 +29,8 @@ describe('ElectronBridgeCore', () => {
 
     it('should accept custom options', () => {
       const options = {
-        outputDirs: {
-          main: 'custom-main',
-          preload: 'custom-preload'
-        },
+        mainProcessHandlerFile: 'custom-main/ipc-handlers.ts',
+        preloadHandlerFile: 'custom-preload/bridge.ts',
         typeDefinitionsFile: 'custom-types/electron.d.ts',
         defaultNamespace: 'customAPI'
       };
@@ -356,10 +352,8 @@ describe('ElectronBridgeCore', () => {
   describe('analyzeFile', () => {
     it('should analyze TypeScript code and return exposed methods', () => {
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: join(testOutputDir, 'analyze-main'),
-          preload: join(testOutputDir, 'analyze-preload')
-        },
+        mainProcessHandlerFile: join(testOutputDir, 'analyze-main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join(testOutputDir, 'analyze-preload', 'bridge.ts'),
         typeDefinitionsFile: join(testOutputDir, 'analyze-types.d.ts')
       });
       
@@ -386,15 +380,13 @@ describe('ElectronBridgeCore', () => {
     });
 
     it('should skip generated files to avoid analysis loops', () => {
-      const tempMainDir = join(testOutputDir, 'temp-main');
-      const tempPreloadDir = join(testOutputDir, 'temp-preload');
+      const tempMainFile = join(testOutputDir, 'temp-main', 'ipc-handlers.ts');
+      const tempPreloadFile = join(testOutputDir, 'temp-preload', 'bridge.ts');
       const tempTypeFile = join(testOutputDir, 'temp-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: tempMainDir,
-          preload: tempPreloadDir
-        },
+        mainProcessHandlerFile: tempMainFile,
+        preloadHandlerFile: tempPreloadFile,
         typeDefinitionsFile: tempTypeFile
       });
       
@@ -410,8 +402,8 @@ describe('ElectronBridgeCore', () => {
       `;
       
       // Should skip files in output directories
-      expect(generator.analyzeFile(join(tempMainDir, 'ipc-handlers.ts'), sourceCode)).toHaveLength(0);
-      expect(generator.analyzeFile(join(tempPreloadDir, 'bridge.ts'), sourceCode)).toHaveLength(0);
+      expect(generator.analyzeFile(tempMainFile, sourceCode)).toHaveLength(0);
+      expect(generator.analyzeFile(tempPreloadFile, sourceCode)).toHaveLength(0);
       expect(generator.analyzeFile(tempTypeFile, sourceCode)).toHaveLength(0);
       
       // Should analyze files not in output directories
@@ -420,10 +412,8 @@ describe('ElectronBridgeCore', () => {
 
     it('should handle different file paths correctly', () => {
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: join(testOutputDir, 'paths-main'),
-          preload: join(testOutputDir, 'paths-preload')
-        },
+        mainProcessHandlerFile: join(testOutputDir, 'paths-main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join(testOutputDir, 'paths-preload', 'bridge.ts'),
         typeDefinitionsFile: join(testOutputDir, 'paths-types.d.ts')
       });
       
@@ -447,10 +437,8 @@ describe('ElectronBridgeCore', () => {
 
     it('should handle malformed TypeScript code gracefully', () => {
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: join(testOutputDir, 'malformed-main'),
-          preload: join(testOutputDir, 'malformed-preload')
-        },
+        mainProcessHandlerFile: join(testOutputDir, 'malformed-main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join(testOutputDir, 'malformed-preload', 'bridge.ts'),
         typeDefinitionsFile: join(testOutputDir, 'malformed-types.d.ts')
       });
       
@@ -482,15 +470,13 @@ describe('ElectronBridgeCore', () => {
     });
 
     it('should generate all three output files', () => {
-      const mainDir = join(testOutputDir, 'main');
-      const preloadDir = join(testOutputDir, 'preload');
+      const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload', 'bridge.ts');
       const typeFile = join(testOutputDir, 'types', 'electron-api.d.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeFile
       });
       
@@ -508,20 +494,18 @@ describe('ElectronBridgeCore', () => {
       generator.generateFiles(methods);
       
       // Check that all files are created
-      expect(existsSync(join(mainDir, 'ipc-handlers.ts'))).toBe(true);
-      expect(existsSync(join(preloadDir, 'bridge.ts'))).toBe(true);
+      expect(existsSync(mainFile)).toBe(true);
+      expect(existsSync(preloadFile)).toBe(true);
       expect(existsSync(typeFile)).toBe(true);
     });
 
     it('should generate correct main handlers content', () => {
-      const mainDir = join(testOutputDir, 'main-handlers');
-      const preloadDir = join(testOutputDir, 'preload-handlers');
+      const mainFile = join(testOutputDir, 'main-handlers', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload-handlers', 'bridge.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'main-handlers-types.d.ts'),
         baseDir: testOutputDir
       });
@@ -546,31 +530,30 @@ describe('ElectronBridgeCore', () => {
       
       generator.generateFiles(methods);
       
-      const mainContent = readFileSync(join(mainDir, 'ipc-handlers.ts'), 'utf8');
+      const mainContent = readFileSync(mainFile, 'utf8');
       
-      const expectedMainContent = `import { ipcMain } from 'electron'
-import { FileService } from '../src/services/FileService'
-import { getVersion } from '../src/utils/version'
+      const expectedMainContent = `import { ipcMain } from 'electron';
+import { FileService } from '../src/services/FileService';
+import { getVersion } from '../src/utils/version';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())`;
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
+`;
       
       expect(mainContent).toBe(expectedMainContent);
     });
 
     it('should generate correct preload bridge content', () => {
-      const mainDir = join(testOutputDir, 'main-bridge');
-      const preloadDir = join(testOutputDir, 'preload-bridge');
+      const mainFile = join(testOutputDir, 'main-bridge', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload-bridge', 'bridge.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'preload-bridge-types.d.ts')
       });
       
@@ -594,30 +577,29 @@ ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())`;
       
       generator.generateFiles(methods);
       
-      const preloadContent = readFileSync(join(preloadDir, 'bridge.ts'), 'utf8');
+      const preloadContent = readFileSync(preloadFile, 'utf8');
       
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron'
+      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path)
-})
+});
 contextBridge.exposeInMainWorld('systemAPI', {
   getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
-})`;
+});
+`;
       
       expect(preloadContent).toBe(expectedPreloadContent);
     });
 
     it('should generate correct type definitions content', () => {
-      const mainDir = join(testOutputDir, 'main-types');
-      const preloadDir = join(testOutputDir, 'preload-types');
+      const mainFile = join(testOutputDir, 'main-types', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload-types', 'bridge.ts');
       const typeFile = join(testOutputDir, 'electron-api.d.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeFile
       });
       
@@ -647,30 +629,30 @@ contextBridge.exposeInMainWorld('systemAPI', {
       const typeContent = readFileSync(typeFile, 'utf8');
       
       const expectedTypeContent = `interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI
+    fileAPI: FileAPI;
   }
 }
 
-export {}`;
+export {}
+`;
       
       expect(typeContent).toBe(expectedTypeContent);
     });
 
     it('should handle relative paths when baseDir is specified', () => {
-      const mainDir = join(testOutputDir, 'main-relative');
+      const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
       const baseDir = testOutputDir;
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: join(testOutputDir, 'preload-relative')
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'relative-types.d.ts'),
         baseDir: baseDir
       });
@@ -688,7 +670,7 @@ export {}`;
       
       generator.generateFiles(methods);
       
-      const mainContent = readFileSync(join(mainDir, 'ipc-handlers.ts'), 'utf8');
+      const mainContent = readFileSync(mainFile, 'utf8');
       
       // Should use relative path, not absolute path
       expect(mainContent).toContain("import { FileService } from '../src/services/FileService'");
@@ -696,11 +678,12 @@ export {}`;
     });
 
     it('should handle empty methods array', () => {
+      const mainFile = join(testOutputDir, 'empty-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
+      
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: join(testOutputDir, 'empty-main'),
-          preload: join(testOutputDir, 'empty-preload')
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'empty-types.d.ts')
       });
       
@@ -708,19 +691,17 @@ export {}`;
       expect(() => generator.generateFiles([])).not.toThrow();
       
       // Files should not be created
-      expect(existsSync(join(testOutputDir, 'empty-main', 'ipc-handlers.ts'))).toBe(false);
-      expect(existsSync(join(testOutputDir, 'empty-preload', 'bridge.ts'))).toBe(false);
+      expect(existsSync(mainFile)).toBe(false);
+      expect(existsSync(preloadFile)).toBe(false);
     });
 
     it('should handle multiple namespaces correctly', () => {
-      const mainDir = join(testOutputDir, 'multi-namespace');
-      const preloadDir = join(testOutputDir, 'multi-preload');
+      const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'multi-types.d.ts')
       });
       
@@ -752,7 +733,7 @@ export {}`;
       
       generator.generateFiles(methods);
       
-      const preloadContent = readFileSync(join(preloadDir, 'bridge.ts'), 'utf8');
+      const preloadContent = readFileSync(preloadFile, 'utf8');
       
       // Should have all three namespaces
       expect(preloadContent).toContain("contextBridge.exposeInMainWorld('fileAPI'");
@@ -761,13 +742,12 @@ export {}`;
     });
 
     it('should deduplicate identical class imports', () => {
-      const mainDir = join(testOutputDir, 'dedupe-main');
+      const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: join(testOutputDir, 'dedupe-preload')
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: join(testOutputDir, 'dedupe-types.d.ts')
       });
       
@@ -792,7 +772,7 @@ export {}`;
       
       generator.generateFiles(methods);
       
-      const mainContent = readFileSync(join(mainDir, 'ipc-handlers.ts'), 'utf8');
+      const mainContent = readFileSync(mainFile, 'utf8');
       
       // Should only have one import statement for FileService
       const importMatches = mainContent.match(/import { FileService } from/g);
@@ -804,15 +784,13 @@ export {}`;
     });
 
     it('should generate files with complex namespace combinations', () => {
-      const mainDir = join(testOutputDir, 'complex-main');
-      const preloadDir = join(testOutputDir, 'complex-preload');
+      const mainFile = join(testOutputDir, 'complex-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'complex-preload', 'bridge.ts');
       const typeFile = join(testOutputDir, 'complex-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
-        outputDirs: {
-          main: mainDir,
-          preload: preloadDir
-        },
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeFile,
         baseDir: testOutputDir
       });
@@ -853,62 +831,65 @@ export {}`;
       generator.generateFiles(methods);
       
       // Test main handlers
-      const mainContent = readFileSync(join(mainDir, 'ipc-handlers.ts'), 'utf8');
-      const expectedMainContent = `import { ipcMain } from 'electron'
-import { FileService } from '../src/services/FileService'
-import { formatDate } from '../src/utils/format'
-import { getVersion } from '../src/utils/system'
+      const mainContent = readFileSync(mainFile, 'utf8');
+      const expectedMainContent = `import { ipcMain } from 'electron';
+import { FileService } from '../src/services/FileService';
+import { formatDate } from '../src/utils/format';
+import { getVersion } from '../src/utils/system';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:fileAPI:writeFile', (event, path, content) => fileserviceInstance.writeFile(path, content))
-ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())
-ipcMain.handle('api:utilsAPI:formatDate', (event, date) => formatDate(date))`;
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
+ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
+`;
       
       expect(mainContent).toBe(expectedMainContent);
       
       // Test preload bridge
-      const preloadContent = readFileSync(join(preloadDir, 'bridge.ts'), 'utf8');
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron'
+      const preloadContent = readFileSync(preloadFile, 'utf8');
+      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
-})
+});
 contextBridge.exposeInMainWorld('systemAPI', {
   getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
-})
+});
 contextBridge.exposeInMainWorld('utilsAPI', {
   formatDate: (date: Date) => ipcRenderer.invoke('api:utilsAPI:formatDate', date)
-})`;
+});
+`;
       
       expect(preloadContent).toBe(expectedPreloadContent);
       
       // Test type definitions
       const typeContent = readFileSync(typeFile, 'utf8');
       const expectedTypeContent = `interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 interface SystemAPI {
-  getVersion(): Promise<string>
+  getVersion(): Promise<string>;
 }
 interface UtilsAPI {
-  formatDate(date: Date): Promise<string>
+  formatDate(date: Date): Promise<string>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI
-    systemAPI: SystemAPI
-    utilsAPI: UtilsAPI
+    fileAPI: FileAPI;
+    systemAPI: SystemAPI;
+    utilsAPI: UtilsAPI;
   }
 }
 
-export {}`;
+export {}
+`;
       
       expect(typeContent).toBe(expectedTypeContent);
     });

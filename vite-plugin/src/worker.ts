@@ -7,13 +7,15 @@ if (!parentPort) {
 }
 
 const logger = {
+  trace: (message: string) => parentPort!.postMessage({ type: 'trace', message }),
   info: (message: string) => parentPort!.postMessage({ type: 'info', message }),
   warn: (message: string) => parentPort!.postMessage({ type: 'warn', message }),
   error: (message: string) => parentPort!.postMessage({ type: 'error', message }),
 };
 
 const generator = createElectronBridgeGenerator({
-  outputDirs: workerData.options.outputDirs,
+  mainProcessHandlerFile: workerData.options.mainProcessHandlerFile,
+  preloadHandlerFile: workerData.options.preloadHandlerFile,
   typeDefinitionsFile: workerData.options.typeDefinitionsFile,
   defaultNamespace: workerData.options.defaultNamespace,
   baseDir: workerData.options.baseDir,

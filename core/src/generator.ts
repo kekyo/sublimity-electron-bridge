@@ -2,8 +2,9 @@ import * as ts from 'typescript';
 import { resolve, dirname, basename, join, relative } from 'path';
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
 import { randomUUID } from 'crypto';
-import { Logger, ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
+import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
+import { createConsoleLogger } from '.';
 
 /**
  * Group methods by namespace
@@ -45,7 +46,7 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
  */
 const generateMainHandlers = (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir?: string, outputDir?: string): string => {
+  baseDir: string | undefined, outputDir: string): string => {
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
@@ -57,18 +58,17 @@ const generateMainHandlers = (
       if (method.className) {
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
         
-        // Convert to relative path if baseDir and outputDir are provided
-        if (baseDir && outputDir) {
-          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+        // Convert to relative path if baseDir are provided
+        if (baseDir) {
           const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
           // Ensure relative path starts with ./ if it doesn't start with ../
           if (!importPath.startsWith('.')) {
             importPath = './' + importPath;
           }
         }
         
-        imports.add(`import { ${method.className} } from '${importPath}'`);
+        imports.add(`import { ${method.className} } from '${importPath}';`);
         singletonInstances.add(method.className);
       }
     }
@@ -78,7 +78,7 @@ const generateMainHandlers = (
   const instanceDeclarations: string[] = [];
   for (const className of Array.from(singletonInstances).sort()) {
     const instanceVar = `${className.toLowerCase()}Instance`;
-    instanceDeclarations.push(`const ${instanceVar} = new ${className}()`);
+    instanceDeclarations.push(`const ${instanceVar} = new ${className}();`);
   }
 
   for (const [namespace, methods] of namespaceGroups.entries()) {
@@ -88,42 +88,42 @@ const generateMainHandlers = (
         const channelName = `api:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
-        
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${instanceVar}.${method.methodName}(${params}))`);
+
+        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${instanceVar}.${method.methodName}(${params}));`);
       } else {
         // Standalone function
         const channelName = `api:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
-        
+
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
-        
-        // Convert to relative path if baseDir and outputDir are provided
-        if (baseDir && outputDir) {
-          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+
+        // Convert to relative path if baseDir are provided
+        if (baseDir) {
           const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
           // Ensure relative path starts with ./ if it doesn't start with ../
           if (!importPath.startsWith('.')) {
             importPath = './' + importPath;
           }
         }
-        
-        imports.add(`import { ${method.methodName} } from '${importPath}'`);
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${method.methodName}(${params}))`);
+
+        imports.add(`import { ${method.methodName} } from '${importPath}';`);
+        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${method.methodName}(${params}));`);
       }
     }
   }
 
   return [
-    "import { ipcMain } from 'electron'",
+    "import { ipcMain } from 'electron';",
     ...Array.from(imports).sort(),
     '',
     '// Create singleton instances',
     ...instanceDeclarations,
     '',
     '// Register IPC handlers',
-    ...handlers
+    ...handlers,
+    ''
   ].join('\n');
 };
 
@@ -146,13 +146,14 @@ const generatePreloadBridge = (
       return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`;
     }).join(',\n');
     
-    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n})`);
+    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n});`);
   }
   
   return [
-    "import { contextBridge, ipcRenderer } from 'electron'",
+    "import { contextBridge, ipcRenderer } from 'electron';",
     '',
-    ...bridges
+    ...bridges,
+    ''
   ].join('\n');
 };
 
@@ -172,11 +173,11 @@ const generateTypeDefinitions = (
 
     const methodsCode = methods.map(method => {
       const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-      return `  ${method.methodName}(${params}): ${method.returnType}`;
+      return `  ${method.methodName}(${params}): ${method.returnType};`;
     }).join('\n');
     
     interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);
-    windowProperties.push(`    ${namespace}: ${typeName}`);
+    windowProperties.push(`    ${namespace}: ${typeName};`);
   }
   
   return [
@@ -188,7 +189,8 @@ const generateTypeDefinitions = (
     '  }',
     '}',
     '',
-    'export {}'
+    'export {}',
+    ''
   ].join('\n');
 };
 
@@ -234,20 +236,21 @@ const atomicWriteFileSync = (filePath: string, content: string): void => {
 /**
  * Check if a file is generated
  * @param filePath - The path to the file
- * @param outputDirs - The output directories
+ * @param mainProcessHandlerFile - The main process handler file
+ * @param preloadHandlerFile - The preload handler file
  * @param typeDefinitionsFile - The type definitions file
  * @returns Whether the file is generated
  */
-const isGeneratedFile = (filePath: string, outputDirs: { main?: string; preload?: string }, typeDefinitionsFile?: string): boolean => {
+const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, preloadHandlerFile?: string, typeDefinitionsFile?: string): boolean => {
   const normalizedPath = filePath.replace(/\\/g, '/');
   
-  // Check if file is in main output directory
-  if (outputDirs.main && normalizedPath.includes(outputDirs.main.replace(/\\/g, '/'))) {
+  // Check if file is the main process handler file
+  if (mainProcessHandlerFile && normalizedPath.includes(mainProcessHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
   
-  // Check if file is in preload output directory
-  if (outputDirs.preload && normalizedPath.includes(outputDirs.preload.replace(/\\/g, '/'))) {
+  // Check if file is the preload handler file
+  if (preloadHandlerFile && normalizedPath.includes(preloadHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
   
@@ -269,14 +272,12 @@ export const createElectronBridgeGenerator =
 
   // Makes default values for the options
   const _options = {
-    outputDirs: {
-      main: options.outputDirs?.main || 'src/main/generated',
-      preload: options.outputDirs?.preload || 'src/preload/generated'
-    },
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/generated/electron-api.d.ts',
-    defaultNamespace: options.defaultNamespace || 'electronAPI',
-    logger: options.logger || { info: console.info, warn: console.warn, error: console.error },
-    baseDir: options.baseDir
+    mainProcessHandlerFile: options.mainProcessHandlerFile || 'src/main/generated/seb_main.ts',
+    preloadHandlerFile: options.preloadHandlerFile || 'src/preload/generated/seb_preload.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.d.ts',
+    defaultNamespace: options.defaultNamespace || 'mainProcess',
+    logger: options.logger ?? createConsoleLogger(),
+    baseDir: options.baseDir || process.cwd()
   };
 
   /**
@@ -287,7 +288,7 @@ export const createElectronBridgeGenerator =
    */
   const analyzeFile = (filePath: string, code: string): ExposedMethod[] => {
     // Skip generated files to avoid analysis loops
-    if (isGeneratedFile(filePath, _options.outputDirs, _options.typeDefinitionsFile)) {
+    if (isGeneratedFile(filePath, _options.mainProcessHandlerFile, _options.preloadHandlerFile, _options.typeDefinitionsFile)) {
       return [];
     }
 
@@ -313,24 +314,30 @@ export const createElectronBridgeGenerator =
     // Sort methods by namespace to ensure deterministic order
     const namespaceGroups = groupMethodsByNamespace(methods);
 
+    // Resolve file paths relative to baseDir
+    const resolveOutputPath = (filePath: string): string => {
+      return resolve(_options.baseDir!, filePath);
+    };
+
     // Generate main handlers
-    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, _options.outputDirs.main);
-    const mainFilePath = resolve(_options.outputDirs!.main!, 'ipc-handlers.ts');
+    const mainFilePath = resolveOutputPath(_options.mainProcessHandlerFile);
+    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, dirname(mainFilePath));
     atomicWriteFileSync(mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
+    const preloadFilePath = resolveOutputPath(_options.preloadHandlerFile);
     const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
-    const preloadFilePath = resolve(_options.outputDirs!.preload!, 'bridge.ts');
     atomicWriteFileSync(preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
+    const typeDefsFilePath = resolveOutputPath(_options.typeDefinitionsFile!);
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
-    atomicWriteFileSync(_options.typeDefinitionsFile!, typeDefsCode);
+    atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
 
     _options.logger.info(`[electron-bridge] Generated files:`);
     _options.logger.info(`  - ${mainFilePath}`);
     _options.logger.info(`  - ${preloadFilePath}`);
-    _options.logger.info(`  - ${_options.typeDefinitionsFile}`);
+    _options.logger.info(`  - ${typeDefsFilePath}`);
     _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
   }
 
