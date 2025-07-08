@@ -46,7 +46,7 @@ const processJSDocTag =
         const namespace = match[1];
         if (!isCamelCase(namespace)) {
           const location = className ? `${className}.${methodName}` : methodName;
-          logger.warn(`[electron-bridge] Warning: @decorator expose argument should be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
+          logger.warn(`[sublimity-electron-bridge] Warning: @decorator expose argument should be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
           return null; // Skip this method
         }
         return { namespace };
@@ -112,7 +112,7 @@ export const extractExposedMethods = (
             
             // Check if method returns Promise
             if (member.type && !isPromiseType(member.type)) {
-              logger.warn(`[electron-bridge] Warning: @decorator expose method should return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
+              logger.warn(`[sublimity-electron-bridge] Warning: @decorator expose method should return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
               return // Skip this method
             };
             
@@ -146,7 +146,7 @@ export const extractExposedMethods = (
         
         // Check if function returns Promise
         if (node.type && !isPromiseType(node.type)) {
-          logger.warn(`[electron-bridge] Warning: @decorator expose function should return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
+          logger.warn(`[sublimity-electron-bridge] Warning: @decorator expose function should return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
           return; // Skip this function
         }
         
@@ -184,7 +184,7 @@ export const extractExposedMethods = (
             
             // Check if arrow function returns Promise
             if (arrowFunc.type && !isPromiseType(arrowFunc.type)) {
-              logger.warn(`[electron-bridge] Warning: @decorator expose function should return Promise: ${declaration.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, declaration.pos).line + 1}`);
+              logger.warn(`[sublimity-electron-bridge] Warning: @decorator expose function should return Promise: ${declaration.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, declaration.pos).line + 1}`);
               return; // Skip this function;
             }
             

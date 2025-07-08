@@ -343,7 +343,7 @@ export const createElectronBridgeGenerator =
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
     atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
 
-    _options.logger.info(`[electron-bridge] Generated files:`);
+    _options.logger.info(`[sublimity-electron-bridge] Generated files:`);
     _options.logger.info(`  - ${mainFilePath}`);
     _options.logger.info(`  - ${preloadFilePath}`);
     _options.logger.info(`  - ${typeDefsFilePath}`);

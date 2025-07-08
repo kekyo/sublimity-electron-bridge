@@ -42,7 +42,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
       const methods = generator.analyzeFile(filePath, code);
       return methods;
     } catch (error) {
-      logger.warn(`[electron-bridge] Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`[sublimity-electron-bridge] Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   });
@@ -88,11 +88,11 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
       }
     });
     worker.on('error', error => {
-      logger.warn(`[electron-bridge] Generation error: ${error instanceof Error ? error.message : String(error)}`)
+      logger.warn(`[sublimity-electron-bridge] Generation error: ${error instanceof Error ? error.message : String(error)}`)
     });
     worker.on('exit', code => {
       if (code != 0) {
-        logger.warn(`[electron-bridge] Generation error: aborted worker: ${code}`)
+        logger.warn(`[sublimity-electron-bridge] Generation error: aborted worker: ${code}`)
       }
       resolve();
     });
@@ -170,7 +170,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         await processBatchDirectly(logger, bridgeOptions, sourceFiles);
       }
     } catch (error) {
-      logger.warn(`[electron-bridge] Error in processAllFiles: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`[sublimity-electron-bridge] Error in processAllFiles: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 

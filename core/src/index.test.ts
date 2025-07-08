@@ -266,7 +266,7 @@ describe('ElectronBridgeCore', () => {
       const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/\[electron-bridge\] Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
+      expect(warnings[0]).toMatch(/\[sublimity-electron-bridge\] Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
     });
 
     it('should validate Promise return types', () => {
@@ -298,7 +298,7 @@ describe('ElectronBridgeCore', () => {
       const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/\[electron-bridge\] Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
+      expect(warnings[0]).toMatch(/\[sublimity-electron-bridge\] Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
     });
   });
 
