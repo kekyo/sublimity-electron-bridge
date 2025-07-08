@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
-import { createDeferred, Deferred } from 'async-primitives';
+import { createAsyncLock, createDeferred, Deferred } from 'async-primitives';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -174,39 +174,49 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     }
   };
 
-  let isRunning = false;
-  let awaitingDeferred: Deferred<void> | undefined;
-  const processAllFiles = async (baseDir?: string): Promise<void> => {
-    // Is awaiting last demand?
-    if (awaitingDeferred) {
-      // Early Completion: Complete the last minute wait here.
-      // The last call appears to be completed, but is actually still ongoing.
-      const ad = awaitingDeferred ;
-      awaitingDeferred = undefined;
-      ad.resolve();
+  let demandDeferred: Deferred<void> | undefined;
+  let demandBaseDir: string | undefined;
+  let runningDeferred: Deferred<void> | undefined;
+  const processAllFiles = (baseDir: string | undefined): Promise<void> => {
+    if (demandDeferred) {
+      demandDeferred.resolve();
+      demandDeferred = undefined;
     }
-    // Is running current processing?
-    if (isRunning) {
-      // Reserve this demand.
-      awaitingDeferred = createDeferred();
-      return awaitingDeferred.promise;
+    if (runningDeferred) {
+      demandDeferred = createDeferred<void>();
+      demandBaseDir = baseDir;
+      return demandDeferred.promise;
     }
 
-    isRunning = true;
-    try {
-      await processAllFilesCore(baseDir);
-    } catch (error: unknown) {
-      isRunning = false;
-      const ad = awaitingDeferred as Deferred<void> | undefined;
-      awaitingDeferred = undefined;
-      ad?.reject(error);
-      return;
-    }
-
-    isRunning = false;
-    const ad = awaitingDeferred as Deferred<void> | undefined;
-    awaitingDeferred = undefined;
-    ad?.resolve();
+    const rd = createDeferred<void>();
+    runningDeferred = rd;
+    const run = async (baseDir: string | undefined) => {
+      try {
+        await processAllFilesCore(baseDir);
+      } catch (error: any) {
+        const rd = runningDeferred!;
+        runningDeferred = demandDeferred;
+        const rbd = demandBaseDir;
+        demandDeferred = undefined;
+        demandBaseDir = undefined
+        if (runningDeferred) {
+          void run(rbd);
+        }
+        rd.reject(error);
+        return;
+      }
+      const rd = runningDeferred!;
+      runningDeferred = demandDeferred;
+      const rbd = demandBaseDir;
+      demandDeferred = undefined;
+      demandBaseDir = undefined
+      if (runningDeferred) {
+        void run(rbd);
+      }
+      rd.resolve();
+    };
+    void run(baseDir);
+    return rd.promise;
   }
 
   let baseDir: string | undefined;

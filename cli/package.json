@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-cli",
-  "version": "0.9.10",
+  "version": "0.9.3",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
     "type": "git",

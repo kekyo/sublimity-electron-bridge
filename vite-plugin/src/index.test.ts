@@ -262,181 +262,177 @@ export {}`;
   });
 
   describe('concurrent execution behavior', () => {
-    [false, true].forEach(enableWorker => {
-      describe(`with enableWorker: ${enableWorker}`, () => {
-        it('should execute single buildStart request normally', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          const startTime = Date.now();
-          await plugin.buildStart();
-          const endTime = Date.now();
-
-          console.log(`Single request completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-          expect(endTime - startTime).toBeGreaterThanOrEqual(0);
-        });
-
-        it('should handle 2 concurrent buildStart requests efficiently', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          const startTime = Date.now();
-
-          // Start 2 concurrent requests
-          const promise1 = plugin.buildStart();
-          const promise2 = plugin.buildStart();
-
-          await Promise.all([promise1, promise2]);
-          const endTime = Date.now();
-
-          console.log(`2 concurrent buildStart requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-
-          // Should complete efficiently without running both processes fully
-          expect(endTime - startTime).toBeGreaterThanOrEqual(0);
-        });
-
-        it('should handle 3 concurrent buildStart requests efficiently', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          const startTime = Date.now();
-
-          // Start 3 concurrent requests
-          const promise1 = plugin.buildStart();
-          const promise2 = plugin.buildStart();
-          const promise3 = plugin.buildStart();
-
-          await Promise.all([promise1, promise2, promise3]);
-          const endTime = Date.now();
-
-          console.log(`3 concurrent buildStart requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-
-          // Should complete efficiently
-          expect(endTime - startTime).toBeGreaterThanOrEqual(0);
-        });
-
-        it('should handle mixed buildStart and handleHotUpdate calls', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          const startTime = Date.now();
-
-          // Mixed concurrent calls
-          const promise1 = plugin.buildStart();
-          const promise2 = plugin.handleHotUpdate();
-          const promise3 = plugin.buildStart();
-
-          await Promise.all([promise1, promise2, promise3]);
-          const endTime = Date.now();
-
-          console.log(`Mixed concurrent requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-
-          // Should complete efficiently
-          expect(endTime - startTime).toBeGreaterThan(0);
-        });
-
-        it('should handle rapid sequential requests without blocking', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          const startTime = Date.now();
-          const promises = [];
-          const timings = [];
-
-          // Start requests with minimal delays
-          for (let i = 0; i < 5; i++) {
-            const requestStart = Date.now();
-            const promise = plugin.buildStart().then(() => {
-              timings.push(Date.now() - requestStart);
-            });
-            promises.push(promise);
-            await new Promise(resolve => setTimeout(resolve, 10));
-          }
-
-          await Promise.all(promises);
-          const endTime = Date.now();
-
-          console.log(`5 rapid sequential requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-          console.log(`Individual timings: ${timings.map(t => t + 'ms').join(', ')}`);
-
-          // Should complete without excessive delay
-          expect(endTime - startTime).toBeLessThan(5000);
-          expect(timings.length).toBe(5);
-        });
-
-        it('should handle sequential requests after completion', async () => {
-          const plugin = sublimityElectronBridge({
-            enableWorker,
-            sourceFiles: [
-              join(testFixturesDir, 'FileService.ts'),
-              join(testFixturesDir, 'database.ts')
-            ]
-          });
-
-          // Delivery root directory path into plugin.
-          await plugin.configResolved({ root: tempDir });
-
-          // First request
-          const start1 = Date.now();
-          await plugin.buildStart();
-          const end1 = Date.now();
-
-          // Wait a bit
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          // Second request
-          const start2 = Date.now();
-          await plugin.buildStart();
-          const end2 = Date.now();
-
-          console.log(`First request: ${end1 - start1}ms (enableWorker: ${enableWorker})`);
-          console.log(`Second request: ${end2 - start2}ms (enableWorker: ${enableWorker})`);
-
-          // Both should complete successfully
-          expect(end1 - start1).toBeGreaterThanOrEqual(0);
-          expect(end2 - start2).toBeGreaterThanOrEqual(0);
-        });
+    it.each([false, true])('should execute single buildStart request normally with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
       });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      const startTime = Date.now();
+      await plugin.buildStart();
+      const endTime = Date.now();
+
+      console.log(`Single request completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
+      expect(endTime - startTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it.each([false, true])('should handle 2 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
+      });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      const startTime = Date.now();
+
+      // Start 2 concurrent requests
+      const promise1 = plugin.buildStart();
+      const promise2 = plugin.buildStart();
+
+      await Promise.all([promise1, promise2]);
+      const endTime = Date.now();
+
+      console.log(`2 concurrent buildStart requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
+
+      // Should complete efficiently without running both processes fully
+      expect(endTime - startTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it.each([false, true])('should handle 3 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
+      });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      const startTime = Date.now();
+
+      // Start 3 concurrent requests
+      const promise1 = plugin.buildStart();
+      const promise2 = plugin.buildStart();
+      const promise3 = plugin.buildStart();
+
+      await Promise.all([promise1, promise2, promise3]);
+      const endTime = Date.now();
+
+      console.log(`3 concurrent buildStart requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
+
+      // Should complete efficiently
+      expect(endTime - startTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it.each([false, true])('should handle mixed buildStart and handleHotUpdate calls with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
+      });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      const startTime = Date.now();
+
+      // Mixed concurrent calls
+      const promise1 = plugin.buildStart();
+      const promise2 = plugin.handleHotUpdate();
+      const promise3 = plugin.buildStart();
+
+      await Promise.all([promise1, promise2, promise3]);
+      const endTime = Date.now();
+
+      console.log(`Mixed concurrent requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
+
+      // Should complete efficiently
+      expect(endTime - startTime).toBeGreaterThan(0);
+    });
+
+    it.each([false, true])('should handle rapid sequential requests without blocking with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
+      });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      const startTime = Date.now();
+      const promises = [];
+      const timings = [];
+
+      // Start requests with minimal delays
+      for (let i = 0; i < 5; i++) {
+        const requestStart = Date.now();
+        const promise = plugin.buildStart().then(() => {
+          timings.push(Date.now() - requestStart);
+        });
+        promises.push(promise);
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+      await Promise.all(promises);
+      const endTime = Date.now();
+
+      console.log(`5 rapid sequential requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
+      console.log(`Individual timings: ${timings.map(t => t + 'ms').join(', ')}`);
+
+      // Should complete without excessive delay
+      expect(endTime - startTime).toBeLessThan(5000);
+      expect(timings.length).toBe(5);
+    });
+
+    it.each([false, true])('should handle sequential requests after completion with enableWorker: %s', async (enableWorker) => {
+      const plugin = sublimityElectronBridge({
+        enableWorker,
+        sourceFiles: [
+          join(testFixturesDir, 'FileService.ts'),
+          join(testFixturesDir, 'database.ts')
+        ]
+      });
+
+      // Delivery root directory path into plugin.
+      await plugin.configResolved({ root: tempDir });
+
+      // First request
+      const start1 = Date.now();
+      await plugin.buildStart();
+      const end1 = Date.now();
+
+      // Wait a bit
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Second request
+      const start2 = Date.now();
+      await plugin.buildStart();
+      const end2 = Date.now();
+
+      console.log(`First request: ${end1 - start1}ms (enableWorker: ${enableWorker})`);
+      console.log(`Second request: ${end2 - start2}ms (enableWorker: ${enableWorker})`);
+
+      // Both should complete successfully
+      expect(end1 - start1).toBeGreaterThanOrEqual(0);
+      expect(end2 - start2).toBeGreaterThanOrEqual(0);
     });
   });
 });
