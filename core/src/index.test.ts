@@ -532,16 +532,17 @@ describe('ElectronBridgeCore', () => {
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
-      const expectedMainContent = `import { ipcMain } from 'electron'
-import { FileService } from '../src/services/FileService'
-import { getVersion } from '../src/utils/version'
+      const expectedMainContent = `import { ipcMain } from 'electron';
+import { FileService } from '../src/services/FileService';
+import { getVersion } from '../src/utils/version';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())`;
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
+`;
       
       expect(mainContent).toBe(expectedMainContent);
     });
@@ -578,14 +579,15 @@ ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())`;
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron'
+      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path)
-})
+});
 contextBridge.exposeInMainWorld('systemAPI', {
   getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
-})`;
+});
+`;
       
       expect(preloadContent).toBe(expectedPreloadContent);
     });
@@ -627,17 +629,18 @@ contextBridge.exposeInMainWorld('systemAPI', {
       const typeContent = readFileSync(typeFile, 'utf8');
       
       const expectedTypeContent = `interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI
+    fileAPI: FileAPI;
   }
 }
 
-export {}`;
+export {}
+`;
       
       expect(typeContent).toBe(expectedTypeContent);
     });
@@ -829,61 +832,64 @@ export {}`;
       
       // Test main handlers
       const mainContent = readFileSync(mainFile, 'utf8');
-      const expectedMainContent = `import { ipcMain } from 'electron'
-import { FileService } from '../src/services/FileService'
-import { formatDate } from '../src/utils/format'
-import { getVersion } from '../src/utils/system'
+      const expectedMainContent = `import { ipcMain } from 'electron';
+import { FileService } from '../src/services/FileService';
+import { formatDate } from '../src/utils/format';
+import { getVersion } from '../src/utils/system';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:fileAPI:writeFile', (event, path, content) => fileserviceInstance.writeFile(path, content))
-ipcMain.handle('api:systemAPI:getVersion', (event) => getVersion())
-ipcMain.handle('api:utilsAPI:formatDate', (event, date) => formatDate(date))`;
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
+ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
+`;
       
       expect(mainContent).toBe(expectedMainContent);
       
       // Test preload bridge
       const preloadContent = readFileSync(preloadFile, 'utf8');
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron'
+      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
-})
+});
 contextBridge.exposeInMainWorld('systemAPI', {
   getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
-})
+});
 contextBridge.exposeInMainWorld('utilsAPI', {
   formatDate: (date: Date) => ipcRenderer.invoke('api:utilsAPI:formatDate', date)
-})`;
+});
+`;
       
       expect(preloadContent).toBe(expectedPreloadContent);
       
       // Test type definitions
       const typeContent = readFileSync(typeFile, 'utf8');
       const expectedTypeContent = `interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 interface SystemAPI {
-  getVersion(): Promise<string>
+  getVersion(): Promise<string>;
 }
 interface UtilsAPI {
-  formatDate(date: Date): Promise<string>
+  formatDate(date: Date): Promise<string>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI
-    systemAPI: SystemAPI
-    utilsAPI: UtilsAPI
+    fileAPI: FileAPI;
+    systemAPI: SystemAPI;
+    utilsAPI: UtilsAPI;
   }
 }
 
-export {}`;
+export {}
+`;
       
       expect(typeContent).toBe(expectedTypeContent);
     });

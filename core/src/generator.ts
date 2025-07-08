@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import { resolve, dirname, basename, join, relative } from 'path';
 import { writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
 import { randomUUID } from 'crypto';
-import { Logger, ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
+import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
 import { createConsoleLogger } from '.';
 
@@ -46,7 +46,7 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
  */
 const generateMainHandlers = (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir?: string, outputDir?: string): string => {
+  baseDir: string | undefined, outputDir: string): string => {
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
@@ -58,18 +58,17 @@ const generateMainHandlers = (
       if (method.className) {
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
         
-        // Convert to relative path if baseDir and outputDir are provided
-        if (baseDir && outputDir) {
-          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+        // Convert to relative path if baseDir are provided
+        if (baseDir) {
           const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
           // Ensure relative path starts with ./ if it doesn't start with ../
           if (!importPath.startsWith('.')) {
             importPath = './' + importPath;
           }
         }
         
-        imports.add(`import { ${method.className} } from '${importPath}'`);
+        imports.add(`import { ${method.className} } from '${importPath}';`);
         singletonInstances.add(method.className);
       }
     }
@@ -79,7 +78,7 @@ const generateMainHandlers = (
   const instanceDeclarations: string[] = [];
   for (const className of Array.from(singletonInstances).sort()) {
     const instanceVar = `${className.toLowerCase()}Instance`;
-    instanceDeclarations.push(`const ${instanceVar} = new ${className}()`);
+    instanceDeclarations.push(`const ${instanceVar} = new ${className}();`);
   }
 
   for (const [namespace, methods] of namespaceGroups.entries()) {
@@ -89,42 +88,42 @@ const generateMainHandlers = (
         const channelName = `api:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
-        
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${instanceVar}.${method.methodName}(${params}))`);
+
+        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${instanceVar}.${method.methodName}(${params}));`);
       } else {
         // Standalone function
         const channelName = `api:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
-        
+
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
-        
-        // Convert to relative path if baseDir and outputDir are provided
-        if (baseDir && outputDir) {
-          const outputFilePath = resolve(outputDir, 'ipc-handlers.ts');
+
+        // Convert to relative path if baseDir are provided
+        if (baseDir) {
           const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(dirname(outputFilePath), methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
           // Ensure relative path starts with ./ if it doesn't start with ../
           if (!importPath.startsWith('.')) {
             importPath = './' + importPath;
           }
         }
-        
-        imports.add(`import { ${method.methodName} } from '${importPath}'`);
-        handlers.push(`ipcMain.handle('${channelName}', (event${args}) => ${method.methodName}(${params}))`);
+
+        imports.add(`import { ${method.methodName} } from '${importPath}';`);
+        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${method.methodName}(${params}));`);
       }
     }
   }
 
   return [
-    "import { ipcMain } from 'electron'",
+    "import { ipcMain } from 'electron';",
     ...Array.from(imports).sort(),
     '',
     '// Create singleton instances',
     ...instanceDeclarations,
     '',
     '// Register IPC handlers',
-    ...handlers
+    ...handlers,
+    ''
   ].join('\n');
 };
 
@@ -147,13 +146,14 @@ const generatePreloadBridge = (
       return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`;
     }).join(',\n');
     
-    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n})`);
+    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n});`);
   }
   
   return [
-    "import { contextBridge, ipcRenderer } from 'electron'",
+    "import { contextBridge, ipcRenderer } from 'electron';",
     '',
-    ...bridges
+    ...bridges,
+    ''
   ].join('\n');
 };
 
@@ -173,11 +173,11 @@ const generateTypeDefinitions = (
 
     const methodsCode = methods.map(method => {
       const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-      return `  ${method.methodName}(${params}): ${method.returnType}`;
+      return `  ${method.methodName}(${params}): ${method.returnType};`;
     }).join('\n');
     
     interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);
-    windowProperties.push(`    ${namespace}: ${typeName}`);
+    windowProperties.push(`    ${namespace}: ${typeName};`);
   }
   
   return [
@@ -189,7 +189,8 @@ const generateTypeDefinitions = (
     '  }',
     '}',
     '',
-    'export {}'
+    'export {}',
+    ''
   ].join('\n');
 };
 

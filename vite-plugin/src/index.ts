@@ -198,7 +198,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         runningDeferred = demandDeferred;
         const rbd = demandBaseDir;
         demandDeferred = undefined;
-        demandBaseDir = undefined
+        demandBaseDir = undefined;
         if (runningDeferred) {
           void run(rbd);
         }
@@ -209,7 +209,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       runningDeferred = demandDeferred;
       const rbd = demandBaseDir;
       demandDeferred = undefined;
-      demandBaseDir = undefined
+      demandBaseDir = undefined;
       if (runningDeferred) {
         void run(rbd);
       }

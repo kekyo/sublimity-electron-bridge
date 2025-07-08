@@ -103,19 +103,20 @@ interface SystemInfo {
     expect(existsSync(mainHandlersPath)).toBe(true);
     
     const mainHandlers = readFileSync(mainHandlersPath, 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { UserService } from '../../UserService'
-import { getSystemInfo } from '../../system'
-import { getUptime } from '../../system'
+    const expectedMainHandlers = `import { ipcMain } from 'electron';
+import { UserService } from '../../UserService';
+import { getSystemInfo } from '../../system';
+import { getUptime } from '../../system';
 
 // Create singleton instances
-const userserviceInstance = new UserService()
+const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
-ipcMain.handle('api:mainProcess:getUptime', (event) => getUptime())
-ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
-ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
+ipcMain.handle('api:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('api:mainProcess:getUptime', (_) => getUptime());
+ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+`;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
 
@@ -124,18 +125,19 @@ ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser
     expect(existsSync(preloadBridgePath)).toBe(true);
     
     const preloadBridge = readFileSync(preloadBridgePath, 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron'
+    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('mainProcess', {
   getCurrentUser: () => ipcRenderer.invoke('api:mainProcess:getCurrentUser'),
   getUptime: () => ipcRenderer.invoke('api:mainProcess:getUptime')
-})
+});
 contextBridge.exposeInMainWorld('systemAPI', {
   getSystemInfo: () => ipcRenderer.invoke('api:systemAPI:getSystemInfo')
-})
+});
 contextBridge.exposeInMainWorld('userAPI', {
   getUser: (id: number) => ipcRenderer.invoke('api:userAPI:getUser', id)
-})`;
+});
+`;
     
     expect(preloadBridge).toBe(expectedPreloadBridge);
 
@@ -145,25 +147,26 @@ contextBridge.exposeInMainWorld('userAPI', {
     
     const typeDefs = readFileSync(typeDefsPath, 'utf-8');
     const expectedTypeDefs = `interface MainProcess {
-  getCurrentUser(): Promise<User | null>
-  getUptime(): Promise<number>
+  getCurrentUser(): Promise<User | null>;
+  getUptime(): Promise<number>;
 }
 interface SystemAPI {
-  getSystemInfo(): Promise<SystemInfo>
+  getSystemInfo(): Promise<SystemInfo>;
 }
 interface UserAPI {
-  getUser(id: number): Promise<User>
+  getUser(id: number): Promise<User>;
 }
 
 declare global {
   interface Window {
-    mainProcess: MainProcess
-    systemAPI: SystemAPI
-    userAPI: UserAPI
+    mainProcess: MainProcess;
+    systemAPI: SystemAPI;
+    userAPI: UserAPI;
   }
 }
 
-export {}`;
+export {}
+`;
     
     expect(typeDefs).toBe(expectedTypeDefs);
   })
@@ -187,19 +190,20 @@ export {}`;
 
     // Verify content is correct
     const mainHandlers = readFileSync(join(tempDir, 'custom-main/ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { UserService } from '../src/UserService'
-import { getSystemInfo } from '../src/system'
-import { getUptime } from '../src/system'
+    const expectedMainHandlers = `import { ipcMain } from 'electron';
+import { UserService } from '../src/UserService';
+import { getSystemInfo } from '../src/system';
+import { getUptime } from '../src/system';
 
 // Create singleton instances
-const userserviceInstance = new UserService()
+const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
-ipcMain.handle('api:mainProcess:getUptime', (event) => getUptime())
-ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
-ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
+ipcMain.handle('api:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('api:mainProcess:getUptime', (_) => getUptime());
+ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+`;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
   });
@@ -221,43 +225,45 @@ ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser
     expect(result.exitCode).toBe(0);
 
     const mainHandlers = readFileSync(join(tempDir, 'src/main/generated/seb_main.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { UserService } from '../../UserService'
-import { getSystemInfo } from '../../system'
-import { getUptime } from '../../system'
+    const expectedMainHandlers = `import { ipcMain } from 'electron';
+import { UserService } from '../../UserService';
+import { getSystemInfo } from '../../system';
+import { getUptime } from '../../system';
 
 // Create singleton instances
-const userserviceInstance = new UserService()
+const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:customAPI:getCurrentUser', (event) => userserviceInstance.getCurrentUser())
-ipcMain.handle('api:customAPI:getUptime', (event) => getUptime())
-ipcMain.handle('api:systemAPI:getSystemInfo', (event) => getSystemInfo())
-ipcMain.handle('api:userAPI:getUser', (event, id) => userserviceInstance.getUser(id))`;
+ipcMain.handle('api:customAPI:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('api:customAPI:getUptime', (_) => getUptime());
+ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+`;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
 
     const typeDefs = readFileSync(join(tempDir, 'src/renderer/src/generated/seb_types.d.ts'), 'utf-8');
     const expectedTypeDefs = `interface CustomAPI {
-  getCurrentUser(): Promise<User | null>
-  getUptime(): Promise<number>
+  getCurrentUser(): Promise<User | null>;
+  getUptime(): Promise<number>;
 }
 interface SystemAPI {
-  getSystemInfo(): Promise<SystemInfo>
+  getSystemInfo(): Promise<SystemInfo>;
 }
 interface UserAPI {
-  getUser(id: number): Promise<User>
+  getUser(id: number): Promise<User>;
 }
 
 declare global {
   interface Window {
-    customAPI: CustomAPI
-    systemAPI: SystemAPI
-    userAPI: UserAPI
+    customAPI: CustomAPI;
+    systemAPI: SystemAPI;
+    userAPI: UserAPI;
   }
 }
 
-export {}`;
+export {}
+`;
     
     expect(typeDefs).toBe(expectedTypeDefs);
   });

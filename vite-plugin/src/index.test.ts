@@ -67,68 +67,71 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     
     // Main handlers file (based on actual output order)
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { FileService } from '../test-fixtures/FileService'
-import { executeCommand } from '../test-fixtures/database'
-import { getVersion } from '../test-fixtures/database'
-import { queryDatabase } from '../test-fixtures/database'
+    const expectedMainHandlers = `import { ipcMain } from 'electron';
+import { FileService } from '../test-fixtures/FileService';
+import { executeCommand } from '../test-fixtures/database';
+import { getVersion } from '../test-fixtures/database';
+import { queryDatabase } from '../test-fixtures/database';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:databaseAPI:executeCommand', (event, command) => executeCommand(command))
-ipcMain.handle('api:databaseAPI:queryDatabase', (event, sql) => queryDatabase(sql))
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:fileAPI:writeFile', (event, path, content) => fileserviceInstance.writeFile(path, content))
-ipcMain.handle('api:mainProcess:deleteFile', (event, path) => fileserviceInstance.deleteFile(path))
-ipcMain.handle('api:mainProcess:getVersion', (event) => getVersion())`;
+ipcMain.handle('api:databaseAPI:executeCommand', (_, command) => executeCommand(command));
+ipcMain.handle('api:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('api:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
+ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
+`;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron'
+    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
   queryDatabase: (sql: string) => ipcRenderer.invoke('api:databaseAPI:queryDatabase', sql)
-})
+});
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
-})
+});
 contextBridge.exposeInMainWorld('mainProcess', {
   deleteFile: (path: string) => ipcRenderer.invoke('api:mainProcess:deleteFile', path),
   getVersion: () => ipcRenderer.invoke('api:mainProcess:getVersion')
-})`;
+});
+`;
     
     expect(preloadBridge).toBe(expectedPreloadBridge);
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
     const expectedTypeDefs = `interface DatabaseAPI {
-  executeCommand(command: string): Promise<number>
-  queryDatabase(sql: string): Promise<any[]>
+  executeCommand(command: string): Promise<number>;
+  queryDatabase(sql: string): Promise<any[]>;
 }
 interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 interface MainProcess {
-  deleteFile(path: string): Promise<boolean>
-  getVersion(): Promise<string>
+  deleteFile(path: string): Promise<boolean>;
+  getVersion(): Promise<string>;
 }
 
 declare global {
   interface Window {
-    databaseAPI: DatabaseAPI
-    fileAPI: FileAPI
-    mainProcess: MainProcess
+    databaseAPI: DatabaseAPI;
+    fileAPI: FileAPI;
+    mainProcess: MainProcess;
   }
 }
 
-export {}`;
+export {}
+`;
     
     expect(typeDefs).toBe(expectedTypeDefs);
   })
@@ -171,68 +174,71 @@ export {}`;
     
     // Main handlers file
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron'
-import { FileService } from '../test-fixtures/FileService'
-import { executeCommand } from '../test-fixtures/database'
-import { getVersion } from '../test-fixtures/database'
-import { queryDatabase } from '../test-fixtures/database'
+    const expectedMainHandlers = `import { ipcMain } from 'electron';
+import { FileService } from '../test-fixtures/FileService';
+import { executeCommand } from '../test-fixtures/database';
+import { getVersion } from '../test-fixtures/database';
+import { queryDatabase } from '../test-fixtures/database';
 
 // Create singleton instances
-const fileserviceInstance = new FileService()
+const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:databaseAPI:executeCommand', (event, command) => executeCommand(command))
-ipcMain.handle('api:databaseAPI:queryDatabase', (event, sql) => queryDatabase(sql))
-ipcMain.handle('api:fileAPI:readFile', (event, path) => fileserviceInstance.readFile(path))
-ipcMain.handle('api:fileAPI:writeFile', (event, path, content) => fileserviceInstance.writeFile(path, content))
-ipcMain.handle('api:mainProcess:deleteFile', (event, path) => fileserviceInstance.deleteFile(path))
-ipcMain.handle('api:mainProcess:getVersion', (event) => getVersion())`;
+ipcMain.handle('api:databaseAPI:executeCommand', (_, command) => executeCommand(command));
+ipcMain.handle('api:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
+ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('api:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
+ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
+`;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron'
+    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
   queryDatabase: (sql: string) => ipcRenderer.invoke('api:databaseAPI:queryDatabase', sql)
-})
+});
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
   writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
-})
+});
 contextBridge.exposeInMainWorld('mainProcess', {
   deleteFile: (path: string) => ipcRenderer.invoke('api:mainProcess:deleteFile', path),
   getVersion: () => ipcRenderer.invoke('api:mainProcess:getVersion')
-})`;
+});
+`;
     
     expect(preloadBridge).toBe(expectedPreloadBridge);
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
     const expectedTypeDefs = `interface DatabaseAPI {
-  executeCommand(command: string): Promise<number>
-  queryDatabase(sql: string): Promise<any[]>
+  executeCommand(command: string): Promise<number>;
+  queryDatabase(sql: string): Promise<any[]>;
 }
 interface FileAPI {
-  readFile(path: string): Promise<string>
-  writeFile(path: string, content: string): Promise<void>
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
 }
 interface MainProcess {
-  deleteFile(path: string): Promise<boolean>
-  getVersion(): Promise<string>
+  deleteFile(path: string): Promise<boolean>;
+  getVersion(): Promise<string>;
 }
 
 declare global {
   interface Window {
-    databaseAPI: DatabaseAPI
-    fileAPI: FileAPI
-    mainProcess: MainProcess
+    databaseAPI: DatabaseAPI;
+    fileAPI: FileAPI;
+    mainProcess: MainProcess;
   }
 }
 
-export {}`;
+export {}
+`;
     
     expect(typeDefs).toBe(expectedTypeDefs);
   });
