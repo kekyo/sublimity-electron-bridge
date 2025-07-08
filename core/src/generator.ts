@@ -274,7 +274,7 @@ export const createElectronBridgeGenerator =
   const _options = {
     mainProcessHandlerFile: options.mainProcessHandlerFile || 'src/main/generated/seb_main.ts',
     preloadHandlerFile: options.preloadHandlerFile || 'src/preload/generated/seb_preload.ts',
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.d.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.ts',
     defaultNamespace: options.defaultNamespace || 'mainProcess',
     logger: options.logger ?? createConsoleLogger(),
     baseDir: options.baseDir || process.cwd()

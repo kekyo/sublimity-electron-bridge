@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
-import { createAsyncLock, createDeferred, Deferred } from 'async-primitives';
+import { createDeferred, Deferred } from 'async-primitives';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -117,7 +117,7 @@ export interface SublimityElectronBridgeVitePluginOptions {
   preloadHandlerFile?: string;
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/renderer/src/generated/seb_types.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
    */
   typeDefinitionsFile?: string;
   /**

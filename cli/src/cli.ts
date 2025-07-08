@@ -29,7 +29,7 @@ program
   .option('-b, --baseDir <path>', 'Project base directory path')
   .option('-m, --main <file>', 'Main process output file', 'src/main/generated/seb_main.ts')
   .option('-p, --preload <file>', 'Preload script output file', 'src/preload/generated/seb_preload.ts')
-  .option('-t, --types <file>', 'Type definitions output file', 'src/renderer/src/generated/seb_types.d.ts')
+  .option('-t, --types <file>', 'Type definitions output file', 'src/renderer/src/generated/seb_types.ts')
   .option('-n, --namespace <name>', 'Default namespace', 'mainProcess')
   .action(async (files, options) => {
     try {

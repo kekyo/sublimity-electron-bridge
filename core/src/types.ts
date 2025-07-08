@@ -40,7 +40,7 @@ export interface ElectronBridgeOptions {
   preloadHandlerFile?: string;
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/renderer/src/generated/seb_types.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
    */
   typeDefinitionsFile?: string;
   /**
