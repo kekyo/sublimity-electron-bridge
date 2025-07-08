@@ -115,6 +115,9 @@ const generateMainHandlers = (
   }
 
   return [
+    "// This is auto-generated main process handler by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     "import { ipcMain } from 'electron';",
     ...Array.from(imports).sort(),
     '',
@@ -150,6 +153,9 @@ const generatePreloadBridge = (
   }
   
   return [
+    "// This is auto-generated preloader by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     "import { contextBridge, ipcRenderer } from 'electron';",
     '',
     ...bridges,
@@ -181,6 +187,9 @@ const generateTypeDefinitions = (
   }
   
   return [
+    "// This is auto-generated type definitions by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     ...interfaces,
     '',
     'declare global {',

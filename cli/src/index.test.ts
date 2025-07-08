@@ -103,7 +103,10 @@ interface SystemInfo {
     expect(existsSync(mainHandlersPath)).toBe(true);
     
     const mainHandlers = readFileSync(mainHandlersPath, 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { UserService } from '../../UserService';
 import { getSystemInfo } from '../../system';
 import { getUptime } from '../../system';
@@ -125,7 +128,10 @@ ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     expect(existsSync(preloadBridgePath)).toBe(true);
     
     const preloadBridge = readFileSync(preloadBridgePath, 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
+    const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('mainProcess', {
   getCurrentUser: () => ipcRenderer.invoke('api:mainProcess:getCurrentUser'),
@@ -142,11 +148,14 @@ contextBridge.exposeInMainWorld('userAPI', {
     expect(preloadBridge).toBe(expectedPreloadBridge);
 
     // Verify type definitions file
-    const typeDefsPath = join(tempDir, 'src/renderer/src/generated/seb_types.d.ts');
+    const typeDefsPath = join(tempDir, 'src/renderer/src/generated/seb_types.ts');
     expect(existsSync(typeDefsPath)).toBe(true);
     
     const typeDefs = readFileSync(typeDefsPath, 'utf-8');
-    const expectedTypeDefs = `interface MainProcess {
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface MainProcess {
   getCurrentUser(): Promise<User | null>;
   getUptime(): Promise<number>;
 }
@@ -190,7 +199,10 @@ export {}
 
     // Verify content is correct
     const mainHandlers = readFileSync(join(tempDir, 'custom-main/ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { UserService } from '../src/UserService';
 import { getSystemInfo } from '../src/system';
 import { getUptime } from '../src/system';
@@ -225,7 +237,10 @@ ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     expect(result.exitCode).toBe(0);
 
     const mainHandlers = readFileSync(join(tempDir, 'src/main/generated/seb_main.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { UserService } from '../../UserService';
 import { getSystemInfo } from '../../system';
 import { getUptime } from '../../system';
@@ -242,8 +257,11 @@ ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     
     expect(mainHandlers).toBe(expectedMainHandlers);
 
-    const typeDefs = readFileSync(join(tempDir, 'src/renderer/src/generated/seb_types.d.ts'), 'utf-8');
-    const expectedTypeDefs = `interface CustomAPI {
+    const typeDefs = readFileSync(join(tempDir, 'src/renderer/src/generated/seb_types.ts'), 'utf-8');
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface CustomAPI {
   getCurrentUser(): Promise<User | null>;
   getUptime(): Promise<number>;
 }

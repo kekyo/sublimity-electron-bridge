@@ -532,7 +532,10 @@ describe('ElectronBridgeCore', () => {
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
-      const expectedMainContent = `import { ipcMain } from 'electron';
+      const expectedMainContent = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../src/services/FileService';
 import { getVersion } from '../src/utils/version';
 
@@ -579,7 +582,10 @@ ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
+      const expectedPreloadContent = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path)
@@ -628,7 +634,10 @@ contextBridge.exposeInMainWorld('systemAPI', {
       
       const typeContent = readFileSync(typeFile, 'utf8');
       
-      const expectedTypeContent = `interface FileAPI {
+      const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface FileAPI {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
 }
@@ -832,7 +841,10 @@ export {}
       
       // Test main handlers
       const mainContent = readFileSync(mainFile, 'utf8');
-      const expectedMainContent = `import { ipcMain } from 'electron';
+      const expectedMainContent = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../src/services/FileService';
 import { formatDate } from '../src/utils/format';
 import { getVersion } from '../src/utils/system';
@@ -851,7 +863,10 @@ ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
       
       // Test preload bridge
       const preloadContent = readFileSync(preloadFile, 'utf8');
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
+      const expectedPreloadContent = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
@@ -869,7 +884,10 @@ contextBridge.exposeInMainWorld('utilsAPI', {
       
       // Test type definitions
       const typeContent = readFileSync(typeFile, 'utf8');
-      const expectedTypeContent = `interface FileAPI {
+      const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface FileAPI {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
 }
