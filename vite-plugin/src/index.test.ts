@@ -44,7 +44,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     // Mock configResolved to set baseDir to temp directory
     const configResolved = plugin.configResolved as Function;
     if (configResolved) {
-      configResolved.call(plugin, { root: tempDir });
+      await configResolved.call(plugin, { root: tempDir });
     }
 
     const mockContext = {
@@ -160,7 +160,7 @@ export {}
     // Mock configResolved to set baseDir to temp directory
     const configResolved = plugin.configResolved as Function;
     if (configResolved) {
-      configResolved.call(plugin, { root: tempDir });
+      await configResolved.call(plugin, { root: tempDir });
     }
 
     const mockContext = {
@@ -359,34 +359,6 @@ export {}
 
       // Should complete efficiently
       expect(endTime - startTime).toBeGreaterThanOrEqual(0);
-    });
-
-    it.each([false, true])('should handle mixed buildStart and handleHotUpdate calls with enableWorker: %s', async (enableWorker) => {
-      const plugin = sublimityElectronBridge({
-        enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
-      });
-
-      // Delivery root directory path into plugin.
-      await plugin.configResolved({ root: tempDir });
-
-      const startTime = Date.now();
-
-      // Mixed concurrent calls
-      const promise1 = plugin.buildStart();
-      const promise2 = plugin.handleHotUpdate();
-      const promise3 = plugin.buildStart();
-
-      await Promise.all([promise1, promise2, promise3]);
-      const endTime = Date.now();
-
-      console.log(`Mixed concurrent requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-
-      // Should complete efficiently
-      expect(endTime - startTime).toBeGreaterThan(0);
     });
 
     it.each([false, true])('should handle rapid sequential requests without blocking with enableWorker: %s', async (enableWorker) => {

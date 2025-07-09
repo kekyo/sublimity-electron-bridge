@@ -25,7 +25,7 @@ export default defineConfig({
     },
     target: 'node14',
     rollupOptions: {
-      external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'url', 'module']
+      external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'url', 'module', 'chokidar']
     }
   }
 });

@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
 import { createDeferred, Deferred } from 'async-primitives';
+import chokidar, { FSWatcher, watch } from 'chokidar';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -16,20 +17,25 @@ const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<strin
   const defaultPatterns = [
     'src/main/**/*.ts'
   ];
-  
+
   const allFiles: string[] = [];
   for (const pattern of defaultPatterns) {
     try {
       const files = await glob(pattern, { 
-        ignore: ['**/node_modules/**', '**/dist/**', '**/*.d.ts'],
-        absolute: true
+        ignore: [
+          '**/node_modules/**',
+          ...(options.mainProcessHandlerFile ? [options.mainProcessHandlerFile] : []),
+          ...(options.preloadHandlerFile ? [options.preloadHandlerFile] : []),
+          ...(options.typeDefinitionsFile ? [options.typeDefinitionsFile] : [])
+        ],
+        cwd: options.baseDir
       });
       allFiles.push(...files);
     } catch (error) {
       // Ignore pattern matching errors and continue
     }
   }
-  
+
   // Remove duplicates
   return [...new Set(allFiles)];
 };
@@ -243,7 +249,34 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
   let logger = createConsoleLogger();
   let baseDir: string | undefined;
   let processingCount = 0;
-  
+  let watcher: FSWatcher | undefined;
+
+  const startFileWatching = async () => {
+    if (watcher) {
+      watcher.close();
+    }
+
+    const filePaths = await collectSourceFiles(options);
+
+    watcher = watch(filePaths, {
+      persistent: true,
+      ignoreInitial: true
+    });
+
+    watcher.on('change', async filePath => {
+      if (filePath && baseDir) {
+        await processAllFiles(logger, baseDir, `seb-vite:filechange:${processingCount++}`);
+      }
+    });
+  };
+
+  const stopFileWatching = async () => {
+    if (watcher) {
+      watcher.close();
+      watcher = undefined;
+    }
+  };
+
   return {
     name: 'sublimity-electron-bridge',
     config: config => {
@@ -254,9 +287,8 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         warn: config?.customLogger?.warn ?? logger.warn,
         error: config?.customLogger?.error ?? logger.error,
       };
-      return processAllFiles(logger, baseDir, `seb-vite:config:${processingCount++}`);
     },
-    configResolved: config => {
+    configResolved: async config => {
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
       logger = {
@@ -264,26 +296,11 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         warn: config?.logger?.warn ?? logger.warn,
         error: config?.logger?.error ?? logger.error,
       };
-      return processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);
+      await stopFileWatching();
+      await processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);
+      await startFileWatching();
     },
-    options: async options => {
-      // Process all files at build start
-      await processAllFiles(logger, baseDir, `seb-vite:options:${processingCount++}`);
-      return options;
-    },
-    buildStart: () => {
-      // Process all files at build start
-      return processAllFiles(logger, baseDir, `seb-vite:buildStart:${processingCount++}`);
-    },
-    handleHotUpdate: async ctx => {
-      // Re-process all files on hot update
-      baseDir = ctx?.server?.config?.root ?? baseDir;
-      logger = {
-        info: ctx?.server?.config?.logger?.info ?? logger.info,
-        warn: ctx?.server?.config?.logger?.warn ?? logger.warn,
-        error: ctx?.server?.config?.logger?.error ?? logger.error,
-      };
-      return processAllFiles(logger, baseDir, `seb-vite:handleHotUpdate:${processingCount++}`);
-    }
+    buildStart: () => stopFileWatching(),
+    buildEnd: () => startFileWatching(),
   };
 };
