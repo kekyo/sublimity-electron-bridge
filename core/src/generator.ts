@@ -316,10 +316,6 @@ export const createElectronBridgeGenerator =
    * @param methods - The exposed methods
    */
   const generateFiles = (methods: ExposedMethod[]): void => {
-    if (methods.length === 0) {
-      return;
-    }
-
     // Sort methods by namespace to ensure deterministic order
     const namespaceGroups = groupMethodsByNamespace(methods);
 

@@ -40,9 +40,7 @@ async function processBatch() {
   const allMethods = methodArrays.flat();
   
   // Generate files once
-  if (allMethods.length > 0) {
-    generator.generateFiles(allMethods);
-  }
+  generator.generateFiles(allMethods);
 }
 
 processBatch().catch(error => {

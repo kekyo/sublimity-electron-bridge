@@ -702,10 +702,38 @@ export {}
       
       // Should not create files when no methods provided
       expect(() => generator.generateFiles([])).not.toThrow();
-      
-      // Files should not be created
-      expect(existsSync(mainFile)).toBe(false);
-      expect(existsSync(preloadFile)).toBe(false);
+
+      const mainContent = readFileSync(mainFile, 'utf8');
+      expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+
+// Create singleton instances
+
+// Register IPC handlers
+`);
+
+      const preloadContent = readFileSync(preloadFile, 'utf8');
+      expect(preloadContent).toBe(`// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
+
+`);
+
+      const typeDefContent = readFileSync(typeDefFile, 'utf8');
+      expect(typeDefContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+
+declare global {
+  interface Window {
+  }
+}
+
+export {}
+`);
     });
 
     it('should handle multiple namespaces correctly', () => {

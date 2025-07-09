@@ -5,12 +5,20 @@ import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
 import { createDeferred, Deferred } from 'async-primitives';
-import chokidar, { FSWatcher, watch } from 'chokidar';
+import { FSWatcher, watch } from 'chokidar';
 
 ///////////////////////////////////////////////////////////////////////
 
 // Version is injected at build time by Vite
 declare const __VERSION__: string;
+
+const getIgnoreFiles = (baseDir: string | undefined, options: ElectronBridgeOptions): string[] => {
+  return [
+    ...(options.mainProcessHandlerFile ? glob.sync(options.mainProcessHandlerFile, { cwd: baseDir, absolute: true }) : []),
+    ...(options.preloadHandlerFile ? glob.sync(options.preloadHandlerFile, { cwd: baseDir, absolute: true }) : []),
+    ...(options.typeDefinitionsFile ? glob.sync(options.typeDefinitionsFile, { cwd: baseDir, absolute: true }) : [])
+  ];
+};
 
 const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
   // Default source patterns
@@ -22,12 +30,7 @@ const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<strin
   for (const pattern of defaultPatterns) {
     try {
       const files = await glob(pattern, { 
-        ignore: [
-          '**/node_modules/**',
-          ...(options.mainProcessHandlerFile ? [options.mainProcessHandlerFile] : []),
-          ...(options.preloadHandlerFile ? [options.preloadHandlerFile] : []),
-          ...(options.typeDefinitionsFile ? [options.typeDefinitionsFile] : [])
-        ],
+        ignore: getIgnoreFiles(options.baseDir, options),
         cwd: options.baseDir
       });
       allFiles.push(...files);
@@ -60,9 +63,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
   const allMethods = methodArrays.flat();
   
   // Generate files once
-  if (allMethods.length > 0) {
-    generator.generateFiles(allMethods);
-  }
+  generator.generateFiles(allMethods);
 };
 
 const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
@@ -90,9 +91,9 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 
     worker.on('message', ({type, message}) => {
       switch (type) {
-        case 'info': logger.info(message);
-        case 'warn': logger.warn(message);
-        default: logger.error(message);
+        case 'info': logger.info(message); break;
+        case 'warn': logger.warn(message); break;
+        default: logger.error(message); break;
       }
     });
     worker.on('error', error => {
@@ -126,9 +127,6 @@ const processAllFilesCore = async (
     // 1. Collect source files from directories
     const sourceFiles = options.sourceFiles ??
       await collectSourceFiles(bridgeOptions);
-    if (sourceFiles.length === 0) {
-      return;
-    }
 
     // 2. Process all files in batch
     if (options.enableWorker ?? true) {
@@ -255,17 +253,35 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     if (watcher) {
       watcher.close();
     }
+    if (!baseDir) {
+      return;
+    }
 
-    const filePaths = await collectSourceFiles(options);
+    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}`);
 
-    watcher = watch(filePaths, {
+    const ignoreFiles = getIgnoreFiles(baseDir, options);
+
+    watcher = watch(baseDir, {
       persistent: true,
-      ignoreInitial: true
+      awaitWriteFinish: true,
+      interval: 100
     });
-
-    watcher.on('change', async filePath => {
-      if (filePath && baseDir) {
-        await processAllFiles(logger, baseDir, `seb-vite:filechange:${processingCount++}`);
+    watcher.on('all', async (event, filePath) => {
+      const pc = processingCount++;
+      switch (event) {
+        case 'add':
+        case 'change':
+        case 'unlink': {
+          if (!ignoreFiles.includes(filePath)) {
+            logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
+            await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
+          } else {
+            logger.info(`[seb-vite:watch:${pc}]: Ignored: ${event}: ${filePath}`);
+          }
+        }
+        default: {
+          logger.info(`[seb-vite:watch:${pc}]: Ignored: ${event}: ${filePath}`);
+        }
       }
     });
   };
@@ -274,6 +290,8 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     if (watcher) {
       watcher.close();
       watcher = undefined;
+ 
+      logger.info(`[seb-vite:watch:${processingCount++}]: Stopped watching`);
     }
   };
 
