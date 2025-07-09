@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.9.4",
+  "version": "0.10.3",
   "description": "Electron bridge generator for automatic IPC setup",
   "repository": {
     "type": "git",

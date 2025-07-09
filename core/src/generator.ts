@@ -115,6 +115,9 @@ const generateMainHandlers = (
   }
 
   return [
+    "// This is auto-generated main process handler by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     "import { ipcMain } from 'electron';",
     ...Array.from(imports).sort(),
     '',
@@ -150,6 +153,9 @@ const generatePreloadBridge = (
   }
   
   return [
+    "// This is auto-generated preloader by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     "import { contextBridge, ipcRenderer } from 'electron';",
     '',
     ...bridges,
@@ -181,6 +187,9 @@ const generateTypeDefinitions = (
   }
   
   return [
+    "// This is auto-generated type definitions by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
     ...interfaces,
     '',
     'declare global {',
@@ -272,12 +281,12 @@ export const createElectronBridgeGenerator =
 
   // Makes default values for the options
   const _options = {
-    mainProcessHandlerFile: options.mainProcessHandlerFile || 'src/main/generated/seb_main.ts',
-    preloadHandlerFile: options.preloadHandlerFile || 'src/preload/generated/seb_preload.ts',
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.d.ts',
-    defaultNamespace: options.defaultNamespace || 'mainProcess',
+    mainProcessHandlerFile: options.mainProcessHandlerFile ?? 'src/main/generated/seb_main.ts',
+    preloadHandlerFile: options.preloadHandlerFile ?? 'src/preload/generated/seb_preload.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile ?? 'src/renderer/src/generated/seb_types.ts',
+    defaultNamespace: options.defaultNamespace ?? 'mainProcess',
     logger: options.logger ?? createConsoleLogger(),
-    baseDir: options.baseDir || process.cwd()
+    baseDir: options.baseDir ?? process.cwd()
   };
 
   /**
@@ -334,7 +343,7 @@ export const createElectronBridgeGenerator =
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
     atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
 
-    _options.logger.info(`[electron-bridge] Generated files:`);
+    _options.logger.info(`Generated files:`);
     _options.logger.info(`  - ${mainFilePath}`);
     _options.logger.info(`  - ${preloadFilePath}`);
     _options.logger.info(`  - ${typeDefsFilePath}`);

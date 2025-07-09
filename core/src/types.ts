@@ -3,11 +3,6 @@
  */
 export interface Logger {
   /**
-   * Log an trace message
-   * @param msg - The message to log
-   */
-  readonly trace: (msg: string) => void;
-  /**
    * Log an info message
    * @param msg - The message to log
    */
@@ -40,7 +35,7 @@ export interface ElectronBridgeOptions {
   preloadHandlerFile?: string;
   /**
    * The file name for the type definitions
-   * @remarks Default: 'src/renderer/src/generated/seb_types.d.ts'
+   * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
    */
   typeDefinitionsFile?: string;
   /**

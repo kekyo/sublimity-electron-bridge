@@ -59,7 +59,7 @@ project/
 ├── src/preload/generated/
 │   └── seb_preload.ts       # Context bridge implementation
 └── src/renderer/src/generated/
-    └── seb_types.d.ts       # TypeScript type definitions
+    └── seb_types.ts         # IPC interface definitions
 ```
 
 These directories and files are default location.
@@ -104,7 +104,7 @@ Options:
   -b, --baseDir <path>   Project base directory path (default: Current directory)
   -m, --main <file>      Main process output file (default: "src/main/generated/seb_main.ts")
   -p, --preload <file>   Preload script output file (default: "src/preload/generated/seb_preload.ts") 
-  -t, --types <file>     Type definitions output file (default: "src/renderer/src/generated/seb_types.d.ts")
+  -t, --types <file>     Type definitions output file (default: "src/renderer/src/generated/seb_types.ts")
   -n, --namespace <name> Default namespace (default: "mainProcess")
   -h, --help             Display help information
 ```
@@ -154,7 +154,7 @@ export default defineConfig({
 interface SublimityElectronBridgeOptions {
   mainProcessHandlerFile?: string;   // Default: "src/main/generated/seb_main.ts"
   preloadHandlerFile?: string;       // Default: "src/preload/generated/seb_preload.ts"
-  typeDefinitionsFile?: string;      // Default: "src/renderer/src/generated/seb_types.d.ts"
+  typeDefinitionsFile?: string;      // Default: "src/renderer/src/generated/seb_types.ts"
   defaultNamespace?: string;         // Default: "mainProcess"
   enableWorker?: boolean;            // Default: true - Enable worker thread processing
   sourceFiles?: string[];            // Default: "src/main/**/*.ts"
@@ -188,7 +188,7 @@ In `src/main/index.ts`:
 
 ```typescript
 // Will be automatic hooking by this import:
-import 'generated/seb_main.ts';
+import './generated/seb_main';
 
 // (Remains main process code fragemnts...)
 ```
@@ -197,7 +197,7 @@ In `src/preload/index.ts`:
 
 ```typescript
 // Will be automatic hooking by this import:
-import 'generated/seb_preload.ts';
+import './generated/seb_preload';
 
 // (Remains preload code fragemnts...)
 ```
@@ -206,7 +206,7 @@ In `src/renderer/src/main.ts`:
 
 ```typescript
 // Will be import type declarations:
-import 'generated/seb_types.d.ts';
+import './generated/seb_types';
 
 // (Remains renderer code fragemnts...)
 ```

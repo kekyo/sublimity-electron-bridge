@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name('seb')
   .version(__VERSION__)
-  .description(`Sublimity Electron IPC bridge code from TypeScript decorators ${__VERSION__}`)
+  .description(`Sublimity Electron IPC bridge CLI [${__VERSION__}]`)
   .addHelpText('after', `
 Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
 Repository: https://github.com/kekyo/sublimity-electron-bridge
@@ -29,17 +29,19 @@ program
   .option('-b, --baseDir <path>', 'Project base directory path')
   .option('-m, --main <file>', 'Main process output file', 'src/main/generated/seb_main.ts')
   .option('-p, --preload <file>', 'Preload script output file', 'src/preload/generated/seb_preload.ts')
-  .option('-t, --types <file>', 'Type definitions output file', 'src/renderer/src/generated/seb_types.d.ts')
+  .option('-t, --types <file>', 'Type definitions output file', 'src/renderer/src/generated/seb_types.ts')
   .option('-n, --namespace <name>', 'Default namespace', 'mainProcess')
   .action(async (files, options) => {
+    const logger = createConsoleLogger(`seb:${process.pid}`);
+
     try {
       // Check if no files are specified
       if (files.length === 0) {
-        console.warn('No files specified to analyze');
+        logger.warn('No files specified to analyze');
         return;
       }
 
-      console.log(`Found ${files.length} files to analyze...`);
+      logger.info(`Found ${files.length} files to analyze...`);
 
       // Create the generator
       const generator = createElectronBridgeGenerator({
@@ -47,7 +49,7 @@ program
         preloadHandlerFile: options.preload,
         typeDefinitionsFile: options.types,
         defaultNamespace: options.namespace,
-        logger: createConsoleLogger(),
+        logger,
         baseDir: options.baseDir
       });
 
@@ -59,7 +61,7 @@ program
           const methods = generator.analyzeFile(file, content);
           return methods;
         } catch (error) {
-          console.error(`Error analyzing ${file}:`, error instanceof Error ? error.message : error);
+          logger.error(`Error analyzing ${file}: ${error instanceof Error ? error.message : error}`);
           return [];
         }
       });
@@ -71,7 +73,7 @@ program
       generator.generateFiles(allMethods);
 
     } catch (error) {
-      console.error('Error:', error instanceof Error ? error.message : error);
+      logger.error(`Error: ${error instanceof Error ? error.message : error}`);
       process.exit(1);
     }
   });

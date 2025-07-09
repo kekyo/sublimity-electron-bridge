@@ -67,7 +67,10 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     
     // Main handlers file (based on actual output order)
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -89,7 +92,10 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
+    const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
@@ -109,7 +115,10 @@ contextBridge.exposeInMainWorld('mainProcess', {
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
-    const expectedTypeDefs = `interface DatabaseAPI {
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface DatabaseAPI {
   executeCommand(command: string): Promise<number>;
   queryDatabase(sql: string): Promise<any[]>;
 }
@@ -174,7 +183,10 @@ export {}
     
     // Main handlers file
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -196,7 +208,10 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
+    const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
@@ -216,7 +231,10 @@ contextBridge.exposeInMainWorld('mainProcess', {
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
-    const expectedTypeDefs = `interface DatabaseAPI {
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface DatabaseAPI {
   executeCommand(command: string): Promise<number>;
   queryDatabase(sql: string): Promise<any[]>;
 }
