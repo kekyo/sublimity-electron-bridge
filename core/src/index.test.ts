@@ -42,16 +42,16 @@ describe('ElectronBridgeCore', () => {
 
   describe('Utility Functions', () => {
     it('should validate camelCase correctly', () => {
-      expect(isCamelCase('fileAPI')).toBe(true)
-      expect(isCamelCase('electronAPI')).toBe(true)
-      expect(isCamelCase('FileAPI')).toBe(false)
-      expect(isCamelCase('file_api')).toBe(false)
+      expect(isCamelCase('fileAPI')).toBe(true);
+      expect(isCamelCase('electronAPI')).toBe(true);
+      expect(isCamelCase('FileAPI')).toBe(false);
+      expect(isCamelCase('file_api')).toBe(false);
     });
 
     it('should convert to PascalCase correctly', () => {
-      expect(toPascalCase('fileAPI')).toBe('FileAPI')
-      expect(toPascalCase('electronAPI')).toBe('ElectronAPI')
-      expect(toPascalCase('userManager')).toBe('UserManager')
+      expect(toPascalCase('fileAPI')).toBe('FileAPI');
+      expect(toPascalCase('electronAPI')).toBe('ElectronAPI');
+      expect(toPascalCase('userManager')).toBe('UserManager');
     });
   });
 
@@ -266,7 +266,7 @@ describe('ElectronBridgeCore', () => {
       const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/\[electron-bridge\] Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
+      expect(warnings[0]).toMatch(/Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
     });
 
     it('should validate Promise return types', () => {
@@ -298,7 +298,7 @@ describe('ElectronBridgeCore', () => {
       const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/\[electron-bridge\] Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
+      expect(warnings[0]).toMatch(/Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
     });
   });
 
@@ -472,12 +472,12 @@ describe('ElectronBridgeCore', () => {
     it('should generate all three output files', () => {
       const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload', 'bridge.ts');
-      const typeFile = join(testOutputDir, 'types', 'electron-api.d.ts');
+      const typeDefFile = join(testOutputDir, 'types', 'electron-api.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeFile
+        typeDefinitionsFile: typeDefFile
       });
       
       const methods = [
@@ -496,17 +496,18 @@ describe('ElectronBridgeCore', () => {
       // Check that all files are created
       expect(existsSync(mainFile)).toBe(true);
       expect(existsSync(preloadFile)).toBe(true);
-      expect(existsSync(typeFile)).toBe(true);
+      expect(existsSync(typeDefFile)).toBe(true);
     });
 
     it('should generate correct main handlers content', () => {
       const mainFile = join(testOutputDir, 'main-handlers', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-handlers', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'main-handlers-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'main-handlers-types.d.ts'),
+        typeDefinitionsFile: typeDefFile,
         baseDir: testOutputDir
       });
       
@@ -532,7 +533,10 @@ describe('ElectronBridgeCore', () => {
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
-      const expectedMainContent = `import { ipcMain } from 'electron';
+      const expectedMainContent = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../src/services/FileService';
 import { getVersion } from '../src/utils/version';
 
@@ -550,11 +554,12 @@ ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
     it('should generate correct preload bridge content', () => {
       const mainFile = join(testOutputDir, 'main-bridge', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-bridge', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'preload-bridge-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'preload-bridge-types.d.ts')
+        typeDefinitionsFile: typeDefFile
       });
       
       const methods = [
@@ -579,7 +584,10 @@ ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
+      const expectedPreloadContent = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path)
@@ -595,12 +603,12 @@ contextBridge.exposeInMainWorld('systemAPI', {
     it('should generate correct type definitions content', () => {
       const mainFile = join(testOutputDir, 'main-types', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-types', 'bridge.ts');
-      const typeFile = join(testOutputDir, 'electron-api.d.ts');
+      const typeDefFile = join(testOutputDir, 'electron-api.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeFile
+        typeDefinitionsFile: typeDefFile
       });
       
       const methods = [
@@ -626,9 +634,12 @@ contextBridge.exposeInMainWorld('systemAPI', {
       
       generator.generateFiles(methods);
       
-      const typeContent = readFileSync(typeFile, 'utf8');
+      const typeContent = readFileSync(typeDefFile, 'utf8');
       
-      const expectedTypeContent = `interface FileAPI {
+      const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface FileAPI {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
 }
@@ -648,12 +659,13 @@ export {}
     it('should handle relative paths when baseDir is specified', () => {
       const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'relative-types.d.ts');
       const baseDir = testOutputDir;
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'relative-types.d.ts'),
+        typeDefinitionsFile: typeDefFile,
         baseDir: baseDir
       });
       
@@ -680,29 +692,59 @@ export {}
     it('should handle empty methods array', () => {
       const mainFile = join(testOutputDir, 'empty-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'empty-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'empty-types.d.ts')
+        typeDefinitionsFile: typeDefFile
       });
       
       // Should not create files when no methods provided
       expect(() => generator.generateFiles([])).not.toThrow();
-      
-      // Files should not be created
-      expect(existsSync(mainFile)).toBe(false);
-      expect(existsSync(preloadFile)).toBe(false);
+
+      const mainContent = readFileSync(mainFile, 'utf8');
+      expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+
+// Create singleton instances
+
+// Register IPC handlers
+`);
+
+      const preloadContent = readFileSync(preloadFile, 'utf8');
+      expect(preloadContent).toBe(`// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
+
+`);
+
+      const typeDefContent = readFileSync(typeDefFile, 'utf8');
+      expect(typeDefContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+
+declare global {
+  interface Window {
+  }
+}
+
+export {}
+`);
     });
 
     it('should handle multiple namespaces correctly', () => {
       const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'multi-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'multi-types.d.ts')
+        typeDefinitionsFile: typeDefFile
       });
       
       const methods = [
@@ -744,11 +786,12 @@ export {}
     it('should deduplicate identical class imports', () => {
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'dedupe-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: join(testOutputDir, 'dedupe-types.d.ts')
+        typeDefinitionsFile: typeDefFile
       });
       
       const methods = [
@@ -786,12 +829,12 @@ export {}
     it('should generate files with complex namespace combinations', () => {
       const mainFile = join(testOutputDir, 'complex-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'complex-preload', 'bridge.ts');
-      const typeFile = join(testOutputDir, 'complex-types.d.ts');
+      const typeDefFile = join(testOutputDir, 'complex-types.d.ts');
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeFile,
+        typeDefinitionsFile: typeDefFile,
         baseDir: testOutputDir
       });
       
@@ -832,7 +875,10 @@ export {}
       
       // Test main handlers
       const mainContent = readFileSync(mainFile, 'utf8');
-      const expectedMainContent = `import { ipcMain } from 'electron';
+      const expectedMainContent = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../src/services/FileService';
 import { formatDate } from '../src/utils/format';
 import { getVersion } from '../src/utils/system';
@@ -851,7 +897,10 @@ ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
       
       // Test preload bridge
       const preloadContent = readFileSync(preloadFile, 'utf8');
-      const expectedPreloadContent = `import { contextBridge, ipcRenderer } from 'electron';
+      const expectedPreloadContent = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
   readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
@@ -868,8 +917,11 @@ contextBridge.exposeInMainWorld('utilsAPI', {
       expect(preloadContent).toBe(expectedPreloadContent);
       
       // Test type definitions
-      const typeContent = readFileSync(typeFile, 'utf8');
-      const expectedTypeContent = `interface FileAPI {
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface FileAPI {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
 }

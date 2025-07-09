@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { sublimityElectronBridge } from './index'
-import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync } from 'fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -44,7 +44,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     // Mock configResolved to set baseDir to temp directory
     const configResolved = plugin.configResolved as Function;
     if (configResolved) {
-      configResolved.call(plugin, { root: tempDir });
+      await configResolved.call(plugin, { root: tempDir });
     }
 
     const mockContext = {
@@ -67,7 +67,10 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     
     // Main handlers file (based on actual output order)
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -89,7 +92,10 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
+    const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
@@ -109,7 +115,10 @@ contextBridge.exposeInMainWorld('mainProcess', {
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
-    const expectedTypeDefs = `interface DatabaseAPI {
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface DatabaseAPI {
   executeCommand(command: string): Promise<number>;
   queryDatabase(sql: string): Promise<any[]>;
 }
@@ -151,7 +160,7 @@ export {}
     // Mock configResolved to set baseDir to temp directory
     const configResolved = plugin.configResolved as Function;
     if (configResolved) {
-      configResolved.call(plugin, { root: tempDir });
+      await configResolved.call(plugin, { root: tempDir });
     }
 
     const mockContext = {
@@ -174,7 +183,10 @@ export {}
     
     // Main handlers file
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
-    const expectedMainHandlers = `import { ipcMain } from 'electron';
+    const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -196,7 +208,10 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
     
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
-    const expectedPreloadBridge = `import { contextBridge, ipcRenderer } from 'electron';
+    const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
   executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
@@ -216,7 +231,10 @@ contextBridge.exposeInMainWorld('mainProcess', {
     
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
-    const expectedTypeDefs = `interface DatabaseAPI {
+    const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface DatabaseAPI {
   executeCommand(command: string): Promise<number>;
   queryDatabase(sql: string): Promise<any[]>;
 }
@@ -343,34 +361,6 @@ export {}
       expect(endTime - startTime).toBeGreaterThanOrEqual(0);
     });
 
-    it.each([false, true])('should handle mixed buildStart and handleHotUpdate calls with enableWorker: %s', async (enableWorker) => {
-      const plugin = sublimityElectronBridge({
-        enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
-      });
-
-      // Delivery root directory path into plugin.
-      await plugin.configResolved({ root: tempDir });
-
-      const startTime = Date.now();
-
-      // Mixed concurrent calls
-      const promise1 = plugin.buildStart();
-      const promise2 = plugin.handleHotUpdate();
-      const promise3 = plugin.buildStart();
-
-      await Promise.all([promise1, promise2, promise3]);
-      const endTime = Date.now();
-
-      console.log(`Mixed concurrent requests completed in ${endTime - startTime}ms (enableWorker: ${enableWorker})`);
-
-      // Should complete efficiently
-      expect(endTime - startTime).toBeGreaterThan(0);
-    });
-
     it.each([false, true])('should handle rapid sequential requests without blocking with enableWorker: %s', async (enableWorker) => {
       const plugin = sublimityElectronBridge({
         enableWorker,
@@ -439,6 +429,201 @@ export {}
       // Both should complete successfully
       expect(end1 - start1).toBeGreaterThanOrEqual(0);
       expect(end2 - start2).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('file watcher integration', () => {
+    it('should detect file changes and regenerate output when decorator is added', async () => {
+      // Create a test file without decorator
+      const testFile = join(testFixturesDir, 'WatcherTest.ts');
+      const originalContent = `export class WatcherTest {
+  async normalMethod(): Promise<string> {
+    return "test"
+  }
+}`;
+
+      writeFileSync(testFile, originalContent);
+
+      const plugin = sublimityElectronBridge({
+        mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join('preload', 'bridge.ts'),
+        typeDefinitionsFile: join('types', 'electron.d.ts'),
+        sourceFiles: [testFile]
+      });
+
+      // Initialize plugin
+      await plugin.configResolved({ root: tempDir });
+
+      // Initial generation - should be empty since no decorators
+      const expectedEmptyMain = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+
+// Create singleton instances
+
+// Register IPC handlers
+`;
+
+      const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
+      expect(generatedFilesEmpty).toBe(expectedEmptyMain);
+
+      // Add decorator to the file
+      const contentWithDecorator = `export class WatcherTest {
+  /**
+   * @decorator expose
+   */
+  async normalMethod(): Promise<string> {
+    return "test"
+  }
+}`;
+
+      writeFileSync(testFile, contentWithDecorator);
+
+      // Wait for file watcher to detect changes
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Check that output files were regenerated
+      const expectedMainWithDecorator = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+import { WatcherTest } from '../test-fixtures/WatcherTest';
+
+// Create singleton instances
+const watchertestInstance = new WatcherTest();
+
+// Register IPC handlers
+ipcMain.handle('api:mainProcess:normalMethod', (_) => watchertestInstance.normalMethod());
+`;
+
+      const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
+      expect(generatedFilesWithDecorator).toBe(expectedMainWithDecorator);
+
+      const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('mainProcess', {
+  normalMethod: () => ipcRenderer.invoke('api:mainProcess:normalMethod')
+});
+`;
+
+      const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
+      expect(preloadBridge).toBe(expectedPreloadBridge);
+
+      const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+interface MainProcess {
+  normalMethod(): Promise<string>;
+}
+
+declare global {
+  interface Window {
+    mainProcess: MainProcess;
+  }
+}
+
+export {}
+`;
+
+      const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
+      expect(typeDefs).toBe(expectedTypeDefs);
+    });
+
+    it('should detect file changes and regenerate output when decorator is removed', async () => {
+      // Create a test file with decorator
+      const testFile = join(testFixturesDir, 'WatcherTest2.ts');
+      const contentWithDecorator = `export class WatcherTest2 {
+  /**
+   * @decorator expose
+   */
+  async decoratedMethod(): Promise<string> {
+    return "test"
+  }
+}`;
+
+      writeFileSync(testFile, contentWithDecorator);
+
+      const plugin = sublimityElectronBridge({
+        mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
+        preloadHandlerFile: join('preload', 'bridge.ts'),
+        typeDefinitionsFile: join('types', 'electron.d.ts'),
+        sourceFiles: [testFile]
+      });
+
+      // Initialize plugin
+      await plugin.configResolved({ root: tempDir });
+
+      // Initial generation - should contain decorator content
+      const expectedMainWithDecorator = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+import { WatcherTest2 } from '../test-fixtures/WatcherTest2';
+
+// Create singleton instances
+const watchertest2Instance = new WatcherTest2();
+
+// Register IPC handlers
+ipcMain.handle('api:mainProcess:decoratedMethod', (_) => watchertest2Instance.decoratedMethod());
+`;
+
+      const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
+      expect(generatedFilesWithDecorator).toBe(expectedMainWithDecorator);
+
+      // Remove decorator from the file
+      const contentWithoutDecorator = `export class WatcherTest2 {
+  async decoratedMethod(): Promise<string> {
+    return "test"
+  }
+}`;
+
+      writeFileSync(testFile, contentWithoutDecorator);
+
+      // Wait for file watcher to detect changes
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Check that output files were regenerated without the method
+      const expectedEmptyMain = `// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+
+// Create singleton instances
+
+// Register IPC handlers
+`;
+
+      const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
+      expect(generatedFilesEmpty).toBe(expectedEmptyMain);
+
+      const expectedEmptyPreload = `// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
+
+`;
+
+      const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
+      expect(preloadBridge).toBe(expectedEmptyPreload);
+
+      const expectedEmptyTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+
+declare global {
+  interface Window {
+  }
+}
+
+export {}
+`;
+
+      const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
+      expect(typeDefs).toBe(expectedEmptyTypeDefs);
     });
   });
 });
