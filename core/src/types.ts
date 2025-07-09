@@ -3,11 +3,6 @@
  */
 export interface Logger {
   /**
-   * Log an trace message
-   * @param msg - The message to log
-   */
-  readonly trace: (msg: string) => void;
-  /**
    * Log an info message
    * @param msg - The message to log
    */

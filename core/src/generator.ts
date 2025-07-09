@@ -281,12 +281,12 @@ export const createElectronBridgeGenerator =
 
   // Makes default values for the options
   const _options = {
-    mainProcessHandlerFile: options.mainProcessHandlerFile || 'src/main/generated/seb_main.ts',
-    preloadHandlerFile: options.preloadHandlerFile || 'src/preload/generated/seb_preload.ts',
-    typeDefinitionsFile: options.typeDefinitionsFile || 'src/renderer/src/generated/seb_types.ts',
-    defaultNamespace: options.defaultNamespace || 'mainProcess',
+    mainProcessHandlerFile: options.mainProcessHandlerFile ?? 'src/main/generated/seb_main.ts',
+    preloadHandlerFile: options.preloadHandlerFile ?? 'src/preload/generated/seb_preload.ts',
+    typeDefinitionsFile: options.typeDefinitionsFile ?? 'src/renderer/src/generated/seb_types.ts',
+    defaultNamespace: options.defaultNamespace ?? 'mainProcess',
     logger: options.logger ?? createConsoleLogger(),
-    baseDir: options.baseDir || process.cwd()
+    baseDir: options.baseDir ?? process.cwd()
   };
 
   /**
@@ -343,7 +343,7 @@ export const createElectronBridgeGenerator =
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
     atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
 
-    _options.logger.info(`[sublimity-electron-bridge] Generated files:`);
+    _options.logger.info(`Generated files:`);
     _options.logger.info(`  - ${mainFilePath}`);
     _options.logger.info(`  - ${preloadFilePath}`);
     _options.logger.info(`  - ${typeDefsFilePath}`);

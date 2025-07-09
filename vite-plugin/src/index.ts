@@ -8,6 +8,9 @@ import { createDeferred, Deferred } from 'async-primitives';
 
 ///////////////////////////////////////////////////////////////////////
 
+// Version is injected at build time by Vite
+declare const __VERSION__: string;
+
 const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
   // Default source patterns
   const defaultPatterns = [
@@ -42,7 +45,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
       const methods = generator.analyzeFile(filePath, code);
       return methods;
     } catch (error) {
-      logger.warn(`[sublimity-electron-bridge] Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   });
@@ -81,22 +84,55 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 
     worker.on('message', ({type, message}) => {
       switch (type) {
-        case 'trace': logger.trace(message);
         case 'info': logger.info(message);
         case 'warn': logger.warn(message);
         default: logger.error(message);
       }
     });
     worker.on('error', error => {
-      logger.warn(`[sublimity-electron-bridge] Generation error: ${error instanceof Error ? error.message : String(error)}`)
+      logger.warn(`Generation error: ${error instanceof Error ? error.message : String(error)}`)
     });
     worker.on('exit', code => {
       if (code != 0) {
-        logger.warn(`[sublimity-electron-bridge] Generation error: aborted worker: ${code}`)
+        logger.warn(`Generation error: aborted worker: ${code}`)
       }
       resolve();
     });
   });
+};
+
+const processAllFilesCore = async (
+  logger: Logger, baseDir: string | undefined, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
+
+  logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${__VERSION__}]`);
+
+  try {
+    // Convert to ElectronBridgeOptions with baseDir from Vite
+    const bridgeOptions: ElectronBridgeOptions = {
+      mainProcessHandlerFile: options.mainProcessHandlerFile,
+      preloadHandlerFile: options.preloadHandlerFile,
+      typeDefinitionsFile: options.typeDefinitionsFile,
+      defaultNamespace: options.defaultNamespace,
+      logger,
+      baseDir
+    };
+
+    // 1. Collect source files from directories
+    const sourceFiles = options.sourceFiles ??
+      await collectSourceFiles(bridgeOptions);
+    if (sourceFiles.length === 0) {
+      return;
+    }
+
+    // 2. Process all files in batch
+    if (options.enableWorker ?? true) {
+      await processBatchOnWorker(logger, bridgeOptions, sourceFiles);
+    } else {
+      await processBatchDirectly(logger, bridgeOptions, sourceFiles);
+    }
+  } catch (error) {
+    logger.warn(`Error in processAllFilesCore: ${error instanceof Error ? error.message : String(error)}`);
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////
@@ -136,106 +172,118 @@ export interface SublimityElectronBridgeVitePluginOptions {
   sourceFiles?: string[];
 }
 
+interface DemandArgs {
+  logger: Logger;
+  baseDir: string | undefined;
+  processingPrefix: string;
+}
+
 /**
  * Sublimity Electron Bridge Vite plugin
  * @param options - The options for the plugin
  * @returns The plugin
  */
 export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePluginOptions = {}): Plugin => {
-  const logger = createConsoleLogger();
-
-  const processAllFilesCore = async (baseDir?: string): Promise<void> => {
-    try {
-      // Convert to ElectronBridgeOptions with baseDir from Vite
-      const bridgeOptions: ElectronBridgeOptions = {
-        mainProcessHandlerFile: options.mainProcessHandlerFile,
-        preloadHandlerFile: options.preloadHandlerFile,
-        typeDefinitionsFile: options.typeDefinitionsFile,
-        defaultNamespace: options.defaultNamespace,
-        logger,
-        baseDir
-      };
-
-      // 1. Collect source files from directories
-      const sourceFiles = options.sourceFiles ??
-        await collectSourceFiles(bridgeOptions);
-      if (sourceFiles.length === 0) {
-        return;
-      }
-
-      // 2. Process all files in batch
-      if (options.enableWorker ?? true) {
-        await processBatchOnWorker(logger, bridgeOptions, sourceFiles);
-      } else {
-        await processBatchDirectly(logger, bridgeOptions, sourceFiles);
-      }
-    } catch (error) {
-      logger.warn(`[sublimity-electron-bridge] Error in processAllFiles: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
   let demandDeferred: Deferred<void> | undefined;
-  let demandBaseDir: string | undefined;
+  let demandArgs: DemandArgs | undefined;
   let runningDeferred: Deferred<void> | undefined;
-  const processAllFiles = (baseDir: string | undefined): Promise<void> => {
+
+  const processAllFiles = (logger: Logger, baseDir: string | undefined, processingPrefix: string): Promise<void> => {
     if (demandDeferred) {
       demandDeferred.resolve();
       demandDeferred = undefined;
     }
     if (runningDeferred) {
       demandDeferred = createDeferred<void>();
-      demandBaseDir = baseDir;
+      demandArgs = { logger, baseDir, processingPrefix };
       return demandDeferred.promise;
     }
 
     const rd = createDeferred<void>();
     runningDeferred = rd;
-    const run = async (baseDir: string | undefined) => {
+
+    const run = async ({ logger, baseDir, processingPrefix }: DemandArgs) => {
       try {
-        await processAllFilesCore(baseDir);
+        // Insert processing count before logger message
+        const processingLogger = {
+          info: (msg: string) => logger.info(`[${processingPrefix}]: ${msg}`),
+          warn: (msg: string) => logger.warn(`[${processingPrefix}]: ${msg}`),
+          error: (msg: string) => logger.error(`[${processingPrefix}]: ${msg}`)
+        };
+
+        await processAllFilesCore(processingLogger, baseDir, options);
       } catch (error: any) {
         const rd = runningDeferred!;
         runningDeferred = demandDeferred;
-        const rbd = demandBaseDir;
+        const das = demandArgs;
         demandDeferred = undefined;
-        demandBaseDir = undefined;
+        demandArgs = undefined;
         if (runningDeferred) {
-          void run(rbd);
+          void run(das!);
         }
         rd.reject(error);
         return;
       }
       const rd = runningDeferred!;
       runningDeferred = demandDeferred;
-      const rbd = demandBaseDir;
+      const das = demandArgs;
       demandDeferred = undefined;
-      demandBaseDir = undefined;
+      demandArgs = undefined;
       if (runningDeferred) {
-        void run(rbd);
+        void run(das!);
       }
       rd.resolve();
     };
-    void run(baseDir);
+  
+    void run({ logger, baseDir, processingPrefix });
+  
     return rd.promise;
   }
 
+  let logger = createConsoleLogger();
   let baseDir: string | undefined;
+  let processingCount = 0;
   
   return {
     name: 'sublimity-electron-bridge',
+    config: config => {
+      // Get base directory from Vite config
+      baseDir = config?.root ?? baseDir;
+      logger = {
+        info: config?.customLogger?.info ?? logger.info,
+        warn: config?.customLogger?.warn ?? logger.warn,
+        error: config?.customLogger?.error ?? logger.error,
+      };
+      return processAllFiles(logger, baseDir, `seb-vite:config:${processingCount++}`);
+    },
     configResolved: config => {
       // Get base directory from Vite config
-      baseDir = config.root;
-      return processAllFiles(baseDir);
+      baseDir = config?.root ?? baseDir;
+      logger = {
+        info: config?.logger?.info ?? logger.info,
+        warn: config?.logger?.warn ?? logger.warn,
+        error: config?.logger?.error ?? logger.error,
+      };
+      return processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);
+    },
+    options: async options => {
+      // Process all files at build start
+      await processAllFiles(logger, baseDir, `seb-vite:options:${processingCount++}`);
+      return options;
     },
     buildStart: () => {
       // Process all files at build start
-      return processAllFiles(baseDir);
+      return processAllFiles(logger, baseDir, `seb-vite:buildStart:${processingCount++}`);
     },
-    handleHotUpdate: async () => {
+    handleHotUpdate: async ctx => {
       // Re-process all files on hot update
-      await processAllFiles(baseDir);
-      return [];
+      baseDir = ctx?.server?.config?.root ?? baseDir;
+      logger = {
+        info: ctx?.server?.config?.logger?.info ?? logger.info,
+        warn: ctx?.server?.config?.logger?.warn ?? logger.warn,
+        error: ctx?.server?.config?.logger?.error ?? logger.error,
+      };
+      return processAllFiles(logger, baseDir, `seb-vite:handleHotUpdate:${processingCount++}`);
     }
   };
 };
