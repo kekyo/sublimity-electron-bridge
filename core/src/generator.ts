@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { resolve, dirname, basename, join, relative } from 'path';
-import { writeFileSync, mkdirSync, existsSync, renameSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, renameSync, readFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
@@ -216,30 +216,24 @@ const ensureDirectoryExists = (dirPath: string): void => {
   }
 };
 
-/**
- * Atomic write a file
- * @param filePath - The path to the file
- * @param content - The content to write to the file
- * @remarks This function writes a file atomically.
- */
-const atomicWriteFileSync = (filePath: string, content: string): void => {
-  const dir = dirname(filePath);
-  const base = basename(filePath);
-  const tempFile = join(dir, `.${base}.${randomUUID()}.tmp`);
-
-  try {
-    ensureDirectoryExists(dir);
-    writeFileSync(tempFile, content, 'utf8');
-    renameSync(tempFile, filePath);
-  } catch (error) {
-    // Clean up temp file if it exists
+const safeWriteFileSync = (filePath: string, content: string) => {
+  if (existsSync(filePath)) {
     try {
-      if (existsSync(tempFile)) {
-        require('fs').unlinkSync(tempFile);
+      const existingContent = readFileSync(filePath, 'utf8');
+      if (existingContent === content) {
+        return false;
       }
-    } catch {}
-    throw error;
+    } catch (error) {
+      // If we can't read the file, proceed with writing
+    }
   }
+
+  const dir = dirname(filePath);
+
+  ensureDirectoryExists(dir);
+  writeFileSync(filePath, content, 'utf8');
+
+  return true;
 };
 
 /**
@@ -252,22 +246,24 @@ const atomicWriteFileSync = (filePath: string, content: string): void => {
  */
 const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, preloadHandlerFile?: string, typeDefinitionsFile?: string): boolean => {
   const normalizedPath = filePath.replace(/\\/g, '/');
-  
+
   // Check if file is the main process handler file
   if (mainProcessHandlerFile && normalizedPath.includes(mainProcessHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
-  
+
   // Check if file is the preload handler file
-  if (preloadHandlerFile && normalizedPath.includes(preloadHandlerFile.replace(/\\/g, '/'))) {
+  if (preloadHandlerFile &&
+    normalizedPath.includes(preloadHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
-  
+
   // Check if file is the type definitions file
-  if (typeDefinitionsFile && normalizedPath.includes(typeDefinitionsFile.replace(/\\/g, '/'))) {
+  if (typeDefinitionsFile &&
+    normalizedPath.includes(typeDefinitionsFile.replace(/\\/g, '/'))) {
     return true;
   }
-  
+
   return false;
 };
 
@@ -297,7 +293,11 @@ export const createElectronBridgeGenerator =
    */
   const analyzeFile = (filePath: string, code: string): ExposedMethod[] => {
     // Skip generated files to avoid analysis loops
-    if (isGeneratedFile(filePath, _options.mainProcessHandlerFile, _options.preloadHandlerFile, _options.typeDefinitionsFile)) {
+    if (isGeneratedFile(
+      filePath,
+      _options.mainProcessHandlerFile,
+      _options.preloadHandlerFile,
+      _options.typeDefinitionsFile)) {
       return [];
     }
 
@@ -327,23 +327,25 @@ export const createElectronBridgeGenerator =
     // Generate main handlers
     const mainFilePath = resolveOutputPath(_options.mainProcessHandlerFile);
     const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, dirname(mainFilePath));
-    atomicWriteFileSync(mainFilePath, mainHandlersCode);
+    const wroteMainHandlers = safeWriteFileSync(mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
     const preloadFilePath = resolveOutputPath(_options.preloadHandlerFile);
     const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
-    atomicWriteFileSync(preloadFilePath, preloadBridgeCode);
+    const wrotePreloadHandlers = safeWriteFileSync(preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
     const typeDefsFilePath = resolveOutputPath(_options.typeDefinitionsFile!);
     const typeDefsCode = generateTypeDefinitions(namespaceGroups);
-    atomicWriteFileSync(typeDefsFilePath, typeDefsCode);
+    const wroteTypeDefs = safeWriteFileSync(typeDefsFilePath, typeDefsCode);
 
-    _options.logger.info(`Generated files:`);
-    _options.logger.info(`  - ${mainFilePath}`);
-    _options.logger.info(`  - ${preloadFilePath}`);
-    _options.logger.info(`  - ${typeDefsFilePath}`);
-    _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+    if (wroteMainHandlers || wrotePreloadHandlers || wroteTypeDefs) {
+      _options.logger.info(`Generated files:`);
+      if (wroteMainHandlers) _options.logger.info(`  - ${mainFilePath}`);
+      if (wrotePreloadHandlers) _options.logger.info(`  - ${preloadFilePath}`);
+      if (typeDefsFilePath) _options.logger.info(`  - ${typeDefsFilePath}`);
+      _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+    }
   }
 
   // Returns the generator
