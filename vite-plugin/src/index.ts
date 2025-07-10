@@ -9,38 +9,67 @@ import { FSWatcher, watch } from 'chokidar';
 
 ///////////////////////////////////////////////////////////////////////
 
+/**
+ * Sublimity Electron Bridge Vite plugin options
+ */
+export interface SublimityElectronBridgeVitePluginOptions {
+  /**
+   * The output file path for the main process handlers
+   * @remarks Default: 'src/main/generated/seb_main.ts'
+   */
+  mainProcessHandlerFile?: string;
+  /**
+   * The output file path for the preload handlers
+   * @remarks Default: 'src/preload/generated/seb_preload.ts'
+   */
+  preloadHandlerFile?: string;
+  /**
+   * The file name for the type definitions
+   * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
+   */
+  typeDefinitionsFile?: string;
+  /**
+   * The default namespace for the exposed methods
+   * @remarks Default: 'mainProcess'
+   */
+  defaultNamespace?: string;
+  /**
+   * Whether to enable the worker for processing files (Default: true)
+   */
+  enableWorker?: boolean;
+  /**
+   * Source files to analyze
+   * @remarks Default: 'src/main/expose/*.ts'
+   */
+  sourceFiles?: string[];
+}
+
+///////////////////////////////////////////////////////////////////////
+
 // Version is injected at build time by Vite
 declare const __VERSION__: string;
 
-const getIgnoreFiles = (baseDir: string | undefined, options: ElectronBridgeOptions): string[] => {
-  return [
-    ...(options.mainProcessHandlerFile ? glob.sync(options.mainProcessHandlerFile, { cwd: baseDir, absolute: true }) : []),
-    ...(options.preloadHandlerFile ? glob.sync(options.preloadHandlerFile, { cwd: baseDir, absolute: true }) : []),
-    ...(options.typeDefinitionsFile ? glob.sync(options.typeDefinitionsFile, { cwd: baseDir, absolute: true }) : [])
+const collectSourceFiles = async (
+  baseDir: string | undefined,
+   options: SublimityElectronBridgeVitePluginOptions): Promise<string[]> => {
+  const pattern = options.sourceFiles ??
+    'src/main/expose/**/*.ts';   // Default pattern
+  const ignore = [
+    '**/node_modules/**', '**/dist/**', '**/*.d.ts',
+    ...(options.mainProcessHandlerFile ? [options.mainProcessHandlerFile] : []),
+    ...(options.preloadHandlerFile ? [options.preloadHandlerFile] : []),
+    ...(options.typeDefinitionsFile ? [options.typeDefinitionsFile] : [])
   ];
-};
-
-const collectSourceFiles = async (options: ElectronBridgeOptions): Promise<string[]> => {
-  // Default source patterns
-  const defaultPatterns = [
-    'src/main/**/*.ts'
-  ];
-
-  const allFiles: string[] = [];
-  for (const pattern of defaultPatterns) {
-    try {
-      const files = await glob(pattern, { 
-        ignore: getIgnoreFiles(options.baseDir, options),
-        cwd: options.baseDir
-      });
-      allFiles.push(...files);
-    } catch (error) {
-      // Ignore pattern matching errors and continue
-    }
+  try {
+    const files = await glob(pattern, { 
+      ignore,
+      cwd: baseDir,
+      absolute: true
+    });
+    return files;
+  } catch (error) {
+    return [];
   }
-
-  // Remove duplicates
-  return [...new Set(allFiles)];
 };
 
 const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
@@ -114,6 +143,9 @@ const processAllFilesCore = async (
   logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${__VERSION__}]`);
 
   try {
+    // 1. Collect source files from directories
+    const sourceFiles = await collectSourceFiles(baseDir, options);
+
     // Convert to ElectronBridgeOptions with baseDir from Vite
     const bridgeOptions: ElectronBridgeOptions = {
       mainProcessHandlerFile: options.mainProcessHandlerFile,
@@ -123,10 +155,6 @@ const processAllFilesCore = async (
       logger,
       baseDir
     };
-
-    // 1. Collect source files from directories
-    const sourceFiles = options.sourceFiles ??
-      await collectSourceFiles(bridgeOptions);
 
     // 2. Process all files in batch
     if (options.enableWorker ?? true) {
@@ -140,41 +168,6 @@ const processAllFilesCore = async (
 };
 
 ///////////////////////////////////////////////////////////////////////
-
-/**
- * Sublimity Electron Bridge Vite plugin options
- */
-export interface SublimityElectronBridgeVitePluginOptions {
-  /**
-   * The output file path for the main process handlers
-   * @remarks Default: 'src/main/generated/seb_main.ts'
-   */
-  mainProcessHandlerFile?: string;
-  /**
-   * The output file path for the preload handlers
-   * @remarks Default: 'src/preload/generated/seb_preload.ts'
-   */
-  preloadHandlerFile?: string;
-  /**
-   * The file name for the type definitions
-   * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
-   */
-  typeDefinitionsFile?: string;
-  /**
-   * The default namespace for the exposed methods
-   * @remarks Default: 'mainProcess'
-   */
-  defaultNamespace?: string;
-  /**
-   * Whether to enable the worker for processing files (Default: true)
-   */
-  enableWorker?: boolean;
-  /**
-   * Source files to analyze
-   * @remarks Default: 'src/main/*.ts'
-   */
-  sourceFiles?: string[];
-}
 
 interface DemandArgs {
   logger: Logger;
@@ -257,9 +250,9 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       return;
     }
 
-    const ignoreFiles = getIgnoreFiles(baseDir, options);
+    const targetSourceFiles = await collectSourceFiles(baseDir, options);
 
-    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}, ${options}, ${ignoreFiles}`);
+    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}, ${options}, files=${targetSourceFiles.length}`);
 
     watcher = watch(baseDir, {
       persistent: true,
@@ -272,7 +265,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         case 'add':
         case 'change':
         case 'unlink': {
-          if (!ignoreFiles.includes(filePath)) {
+          if (targetSourceFiles.includes(filePath)) {
             logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
             await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
           } else {

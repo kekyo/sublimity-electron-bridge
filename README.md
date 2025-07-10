@@ -54,12 +54,12 @@ Using this tool, the following source code will be automatically generated:
 
 ```
 project/
-├── src/main/generated/
-│   └── seb_main.ts          # IPC event handlers
-├── src/preload/generated/
-│   └── seb_preload.ts       # Context bridge implementation
-└── src/renderer/src/generated/
-    └── seb_types.ts         # IPC interface definitions
+├── src/main/generated/          # IPC event handlers (generated)
+│   └── seb_main.ts
+├── src/preload/generated/       # Context bridge implementation (generated)
+│   └── seb_preload.ts
+└── src/renderer/src/generated/  # IPC interface definitions (generated)
+    └── seb_types.ts
 ```
 
 These directories and files are default location.
@@ -69,9 +69,9 @@ For more information, see below section.
 
 ## Installation and Usage
 
-Choose between CLI tool or Vite plugin based on your development workflow:
+Choose between "CLI tool" or "Vite plugin" based on your development workflow:
 
-### CLI Tool
+### CLI tool
 
 Install the CLI package globally or use it with npx:
 
@@ -79,7 +79,7 @@ Install the CLI package globally or use it with npx:
 npm install -g sublimity-electron-bridge-cli
 ```
 
-#### Basic Usage
+#### CLI tool basic usage
 
 ```bash
 # Generate bridge code for specific TypeScript files
@@ -95,7 +95,7 @@ seb generate src/services/FileService.ts \
   --types src/renderer/src/seb_types.d.ts
 ```
 
-#### CLI Options
+#### CLI tool options
 
 ```bash
 seb generate <files...>
@@ -109,7 +109,7 @@ Options:
   -h, --help             Display help information
 ```
 
-### Vite Plugin
+### Vite plugin
 
 Install the Vite plugin for automatic generation during development builds:
 
@@ -117,7 +117,7 @@ Install the Vite plugin for automatic generation during development builds:
 npm install --save-dev sublimity-electron-bridge-vite
 ```
 
-#### Configuration
+#### Vite plugin configuration
 
 Add the plugin to your `vite.config.ts`:
 
@@ -125,6 +125,7 @@ Add the plugin to your `vite.config.ts`:
 import { defineConfig } from 'vite';
 import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite';
 
+// Vite configuration
 export default defineConfig({
   plugins: [
     sublimityElectronBridge()   // The plugin
@@ -132,12 +133,13 @@ export default defineConfig({
 });
 ```
 
-Or you use with electron-vite `electron.vite.config.ts`:
+Or you can use with "electron-vite" project configuration, `electron.vite.config.ts`:
 
 ```typescript
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { sublimityElectronBridge } from 'sublimity-electron-bridge-vite';
 
+// electron-vite configuration
 export default defineConfig({
   main: {   // NOTE: We have to place the plugin into `main` process.
     plugins: [
@@ -148,7 +150,10 @@ export default defineConfig({
 });
 ```
 
-#### Options
+#### Vite plugin options
+
+The `sourceFiles` can use the glob pattern. Only files matching this pattern will be parsed.
+The default is `src/main/expose/**/*.ts`, which assumes that the public code is placed under this directory.
 
 ```typescript
 interface SublimityElectronBridgeOptions {
@@ -157,11 +162,27 @@ interface SublimityElectronBridgeOptions {
   typeDefinitionsFile?: string;      // Default: "src/renderer/src/generated/seb_types.ts"
   defaultNamespace?: string;         // Default: "mainProcess"
   enableWorker?: boolean;            // Default: true - Enable worker thread processing
-  sourceFiles?: string[];            // Default: "src/main/**/*.ts"
+  sourceFiles?: string[];            // Default: "src/main/expose/**/*.ts"
 }
 ```
 
-For example:
+Here's example (defaulted) directory structure in Vite plugin:
+
+```
+project/
+├── src/main/
+│   ├── expose/                   # Your expose function source files here
+│   │   ├── fileApi.ts
+│   │   └── systemApi.ts
+│   └── generated/                # IPC event handlers (generated)
+│       └── seb_main.ts
+├── src/preload/generated/        # Context bridge implementation (generated)
+│   └── seb_preload.ts
+└── src/renderer/src/generated/   # IPC interface definitions (generated)
+    └── seb_types.ts
+```
+
+Insert optional parameters when you need:
 
 ```typescript
 export default defineConfig({
