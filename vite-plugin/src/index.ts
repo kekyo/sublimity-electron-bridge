@@ -257,9 +257,9 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       return;
     }
 
-    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}`);
-
     const ignoreFiles = getIgnoreFiles(baseDir, options);
+
+    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}, ${options}, ${ignoreFiles}`);
 
     watcher = watch(baseDir, {
       persistent: true,
