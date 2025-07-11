@@ -161,7 +161,7 @@ import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 
 interface MainProcess {
-  getCurrentUser(): Promise<User | null>;
+  getCurrentUser(): Promise<User>;
   getUptime(): Promise<number>;
 }
 interface SystemAPI {
@@ -270,7 +270,7 @@ import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 
 interface CustomAPI {
-  getCurrentUser(): Promise<User | null>;
+  getCurrentUser(): Promise<User>;
   getUptime(): Promise<number>;
 }
 interface SystemAPI {

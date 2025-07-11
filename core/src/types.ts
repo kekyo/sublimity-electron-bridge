@@ -50,6 +50,7 @@ export interface ElectronBridgeOptions {
   logger?: Logger;
   /**
    * The base directory for the project.
+   * Processor requires `./tsconfig.json` when validate exact type informations.
    * @remarks It is used to generate relative paths for the generated files.
    */
   baseDir?: string;
@@ -68,6 +69,10 @@ export interface TypeInfo {
    * The name of the type
    */
   readonly name: string;
+  /**
+   * The file path where the type is defined
+   */
+  readonly filePath?: string;
 }
 
 /**

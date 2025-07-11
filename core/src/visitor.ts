@@ -83,12 +83,82 @@ const isPromiseType = (typeNode: ts.TypeNode): boolean => {
  * @param sourceFile - The source file AST to extract the methods from
  * @param filePath - The path to the source file
  * @param defaultNamespace - The default namespace for the exposed methods
+ * @param typeChecker - The TypeScript type checker
  * @returns The exposed methods
  */
 export const extractExposedMethods = async (
-  logger: Logger, sourceFile: ts.SourceFile, filePath: string, defaultNamespace: string): Promise<ExposedMethod[]> => {
+  logger: Logger, sourceFile: ts.SourceFile, filePath: string, defaultNamespace: string, typeChecker?: ts.TypeChecker): Promise<ExposedMethod[]> => {
   const methods: ExposedMethod[] = [];
   
+  /**
+   * Get type information using TypeScript type checker
+   * @param node - The type node to analyze
+   * @returns TypeInfo with name and filePath
+   */
+  const getTypeInfo = (node: ts.TypeNode | undefined): TypeInfo => {
+    if (!node) {
+      return { name: 'any' };
+    }
+    
+    if (!typeChecker) {
+      // Fallback to text-based extraction if type checker is not available
+      return {
+        name: sourceFile.text.substring(node.pos, node.end).trim()
+      };
+    }
+    
+    try {
+      const type = typeChecker.getTypeAtLocation(node);
+      const typeName = typeChecker.typeToString(type);
+      
+      // Try to get the source file where the type is defined
+      const typeSymbol = type.getSymbol();
+      if (typeSymbol && typeSymbol.valueDeclaration) {
+        const sourceFile = typeSymbol.valueDeclaration.getSourceFile();
+        return {
+          name: typeName,
+          filePath: sourceFile.fileName
+        };
+      }
+      
+      return { name: typeName };
+    } catch (error) {
+      // Fallback to text-based extraction if type checker fails
+      return {
+        name: sourceFile.text.substring(node.pos, node.end).trim()
+      };
+    }
+  };
+  
+  /**
+   * Get parameter type information
+   * @param param - The parameter node
+   * @returns TypeInfo with name and filePath
+   */
+  const getParameterTypeInfo = (param: ts.ParameterDeclaration): TypeInfo => {
+    if (param.type) {
+      return getTypeInfo(param.type);
+    }
+    
+    if (!typeChecker) {
+      return { name: 'any' };
+    }
+    
+    try {
+      // Try to infer type from the parameter symbol
+      const paramSymbol = typeChecker.getSymbolAtLocation(param.name);
+      if (paramSymbol) {
+        const paramType = typeChecker.getTypeOfSymbolAtLocation(paramSymbol, param);
+        const typeName = typeChecker.typeToString(paramType);
+        return { name: typeName };
+      }
+    } catch (error) {
+      // Fallback to 'any' if type checker fails
+    }
+    
+    return { name: 'any' };
+  };
+
   const visit = (node: ts.Node) => {
     // Handle class methods
     if (ts.isClassDeclaration(node) && node.name) {
@@ -101,18 +171,10 @@ export const extractExposedMethods = async (
           if (exposedMethod) {
             const parameters = member.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: {
-                name: param.type ?
-                  sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-                  'any'
-              }
+              type: getParameterTypeInfo(param)
             }));
             
-            const returnType: TypeInfo = {
-              name: member.type ?
-                sourceFile.text.substring(member.type.pos, member.type.end).trim() :
-                'Promise<any>'
-            };
+            const returnType: TypeInfo = member.type ? getTypeInfo(member.type) : { name: 'Promise<any>' };
             
             // Check if method returns Promise
             if (member.type && !isPromiseType(member.type)) {
@@ -139,18 +201,10 @@ export const extractExposedMethods = async (
       if (exposedMethod) {
         const parameters = node.parameters.map(param => ({
           name: (param.name as ts.Identifier).text,
-          type: {
-            name: param.type ?
-              sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-              'any'
-          }
+          type: getParameterTypeInfo(param)
         }));
 
-        const returnType: TypeInfo = {
-          name: node.type ?
-            sourceFile.text.substring(node.type.pos, node.type.end).trim() :
-            'Promise<any>'
-        };
+        const returnType: TypeInfo = node.type ? getTypeInfo(node.type) : { name: 'Promise<any>' };
 
         // Check if function returns Promise
         if (node.type && !isPromiseType(node.type)) {
@@ -181,18 +235,10 @@ export const extractExposedMethods = async (
             const arrowFunc = declaration.initializer;
             const parameters = arrowFunc.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: {
-                name: param.type ?
-                  sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-                  'any'
-              }
+              type: getParameterTypeInfo(param)
             }));
             
-            const returnType: TypeInfo = {
-              name: arrowFunc.type ?
-                sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() :
-                'Promise<any>'
-            };
+            const returnType: TypeInfo = arrowFunc.type ? getTypeInfo(arrowFunc.type) : { name: 'Promise<any>' };
             
             // Check if arrow function returns Promise
             if (arrowFunc.type && !isPromiseType(arrowFunc.type)) {

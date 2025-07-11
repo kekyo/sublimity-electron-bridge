@@ -514,7 +514,67 @@ export const createElectronBridgeGenerator =
       true
     );
 
-    return await extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace);
+    // Try to load tsconfig.json from baseDir
+    let typeChecker: ts.TypeChecker | undefined;
+    let program: ts.Program | undefined;
+
+    if (_options.baseDir) {
+      const tsconfigPath = resolve(_options.baseDir, 'tsconfig.json');
+      
+      try {
+        await fs.access(tsconfigPath);
+        
+        // Read and parse tsconfig.json
+        const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+        if (!configFile.error) {
+          const parsedConfig = ts.parseJsonConfigFileContent(
+            configFile.config,
+            ts.sys,
+            _options.baseDir
+          );
+          
+          // Create program with tsconfig settings
+          program = ts.createProgram({
+            rootNames: [filePath],
+            options: {
+              ...parsedConfig.options,
+              skipLibCheck: true,
+              skipDefaultLibCheck: true,
+              noEmit: true,
+            },
+            host: ts.createCompilerHost(parsedConfig.options),
+            configFileParsingDiagnostics: parsedConfig.errors
+          });
+          
+          const diagnostics = ts.getPreEmitDiagnostics(program);
+          const hasLibraryErrors = diagnostics.some(d => 
+            d.messageText.toString().includes('Cannot find global type') || 
+            d.messageText.toString().includes('lib.d.ts')
+          );
+          
+          if (!hasLibraryErrors) {
+            typeChecker = program.getTypeChecker();
+            
+            // Log non-library related errors
+            if (diagnostics.length > 0) {
+              diagnostics.forEach(diagnostic => {
+                if (diagnostic.file) {
+                  const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start!);
+                  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+                  _options.logger.warn(`  Line ${line + 1}, Column ${character + 1}: ${message}`);
+                } else {
+                  _options.logger.warn(`  ${ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')}`);
+                }
+              });
+            }
+          }
+        }
+      } catch (error) {
+        // tsconfig.json not found or cannot be read, continue without type checker
+      }
+    }
+
+    return await extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace, typeChecker);
   };
 
   /**
