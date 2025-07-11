@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { sublimityElectronBridge } from './index'
-import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync, writeFileSync } from 'fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -12,10 +12,24 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'vite-plugin-test-'));
     testFixturesDir = join(tempDir, 'test-fixtures');
     
-    // Copy test fixtures to temp directory
-    const sourceFixtures = join(__dirname, 'test-fixtures');
-    cpSync(sourceFixtures, testFixturesDir, { recursive: true });
+    // Create test-fixtures directory but don't copy files yet
+    // Files will be copied selectively by individual tests
+    if (!existsSync(testFixturesDir)) {
+      mkdirSync(testFixturesDir, { recursive: true });
+    }
   });
+
+  // Helper function to copy specific test fixtures
+  const copyTestFixtures = (filenames: string[]) => {
+    const sourceFixtures = join(__dirname, 'test-fixtures');
+    filenames.forEach(filename => {
+      const sourcePath = join(sourceFixtures, filename);
+      const targetPath = join(testFixturesDir, filename);
+      if (existsSync(sourcePath)) {
+        cpSync(sourcePath, targetPath);
+      }
+    });
+  };
 
   afterEach(() => {
     if (existsSync(tempDir)) {
@@ -31,14 +45,14 @@ describe('SublimityElectronBridge Vite Plugin', () => {
   });
 
   it('should generate files when processing source files', async () => {
+    // Copy all test fixtures for this test
+    copyTestFixtures(['FileService.ts', 'database.ts']);
+    
     const plugin = sublimityElectronBridge({
       mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
       preloadHandlerFile: join('preload', 'bridge.ts'),
       typeDefinitionsFile: join('types', 'electron.d.ts'),
-      sourceFiles: [
-        join(testFixturesDir, 'FileService.ts'),
-        join(testFixturesDir, 'database.ts')
-      ]
+      targetDir: testFixturesDir
     });
 
     // Mock configResolved to set baseDir to temp directory
@@ -146,15 +160,15 @@ export {}
   })
 
   it('should generate files when using worker threads', async () => {
+    // Copy all test fixtures for this test
+    copyTestFixtures(['FileService.ts', 'database.ts']);
+    
     const plugin = sublimityElectronBridge({
       mainProcessHandlerFile: join(tempDir, 'main', 'ipc-handlers.ts'),
       preloadHandlerFile: join(tempDir, 'preload', 'bridge.ts'),
       typeDefinitionsFile: join(tempDir, 'types', 'electron.d.ts'),
       enableWorker: true,
-      sourceFiles: [
-        join(testFixturesDir, 'FileService.ts'),
-        join(testFixturesDir, 'database.ts')
-      ]
+      targetDir: testFixturesDir
     });
 
     // Mock configResolved to set baseDir to temp directory
@@ -287,12 +301,12 @@ export {}
 
   describe('concurrent execution behavior', () => {
     it.each([false, true])('should execute single buildStart request normally with enableWorker: %s', async (enableWorker) => {
+      // Copy all test fixtures for this test
+      copyTestFixtures(['FileService.ts', 'database.ts']);
+      
       const plugin = sublimityElectronBridge({
         enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
+        targetDir: testFixturesDir
       });
 
       // Delivery root directory path into plugin.
@@ -307,12 +321,12 @@ export {}
     });
 
     it.each([false, true])('should handle 2 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
+      // Copy all test fixtures for this test
+      copyTestFixtures(['FileService.ts', 'database.ts']);
+      
       const plugin = sublimityElectronBridge({
         enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
+        targetDir: testFixturesDir
       });
 
       // Delivery root directory path into plugin.
@@ -334,12 +348,12 @@ export {}
     });
 
     it.each([false, true])('should handle 3 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
+      // Copy all test fixtures for this test
+      copyTestFixtures(['FileService.ts', 'database.ts']);
+      
       const plugin = sublimityElectronBridge({
         enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
+        targetDir: testFixturesDir
       });
 
       // Delivery root directory path into plugin.
@@ -362,12 +376,12 @@ export {}
     });
 
     it.each([false, true])('should handle rapid sequential requests without blocking with enableWorker: %s', async (enableWorker) => {
+      // Copy all test fixtures for this test
+      copyTestFixtures(['FileService.ts', 'database.ts']);
+      
       const plugin = sublimityElectronBridge({
         enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
+        targetDir: testFixturesDir
       });
 
       // Delivery root directory path into plugin.
@@ -399,12 +413,12 @@ export {}
     });
 
     it.each([false, true])('should handle sequential requests after completion with enableWorker: %s', async (enableWorker) => {
+      // Copy all test fixtures for this test
+      copyTestFixtures(['FileService.ts', 'database.ts']);
+      
       const plugin = sublimityElectronBridge({
         enableWorker,
-        sourceFiles: [
-          join(testFixturesDir, 'FileService.ts'),
-          join(testFixturesDir, 'database.ts')
-        ]
+        targetDir: testFixturesDir
       });
 
       // Delivery root directory path into plugin.
@@ -434,6 +448,7 @@ export {}
 
   describe('file watcher integration', () => {
     it('should detect file changes and regenerate output when decorator is added', async () => {
+      // Don't copy existing test fixtures - this test needs to start with empty directory
       // Create a test file without decorator
       const testFile = join(testFixturesDir, 'WatcherTest.ts');
       const originalContent = `export class WatcherTest {
@@ -448,11 +463,14 @@ export {}
         mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
         preloadHandlerFile: join('preload', 'bridge.ts'),
         typeDefinitionsFile: join('types', 'electron.d.ts'),
-        sourceFiles: [testFile]
+        targetDir: testFixturesDir
       });
 
       // Initialize plugin
-      await plugin.configResolved({ root: tempDir });
+      const configResolved = plugin.configResolved as Function;
+      if (configResolved) {
+        await configResolved.call(plugin, { root: tempDir });
+      }
 
       // Initial generation - should be empty since no decorators
       const expectedEmptyMain = `// This is auto-generated main process handler by sublimity-electron-bridge.
@@ -534,6 +552,7 @@ export {}
     });
 
     it('should detect file changes and regenerate output when decorator is removed', async () => {
+      // Don't copy existing test fixtures - this test needs to start with empty directory
       // Create a test file with decorator
       const testFile = join(testFixturesDir, 'WatcherTest2.ts');
       const contentWithDecorator = `export class WatcherTest2 {
@@ -551,11 +570,14 @@ export {}
         mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
         preloadHandlerFile: join('preload', 'bridge.ts'),
         typeDefinitionsFile: join('types', 'electron.d.ts'),
-        sourceFiles: [testFile]
+        targetDir: testFixturesDir
       });
 
       // Initialize plugin
-      await plugin.configResolved({ root: tempDir });
+      const configResolved = plugin.configResolved as Function;
+      if (configResolved) {
+        await configResolved.call(plugin, { root: tempDir });
+      }
 
       // Initial generation - should contain decorator content
       const expectedMainWithDecorator = `// This is auto-generated main process handler by sublimity-electron-bridge.

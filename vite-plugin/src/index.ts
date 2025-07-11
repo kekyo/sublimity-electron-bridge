@@ -6,6 +6,7 @@ import { glob } from 'glob';
 import { createRequire } from 'module';
 import { createDeferred, Deferred } from 'async-primitives';
 import { FSWatcher, watch } from 'chokidar';
+import { join, resolve } from 'path';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -38,10 +39,10 @@ export interface SublimityElectronBridgeVitePluginOptions {
    */
   enableWorker?: boolean;
   /**
-   * Source files to analyze
-   * @remarks Default: 'src/main/expose/*.ts'
+   * Target directory to analyze
+   * @remarks Default: 'src/main/expose/'
    */
-  sourceFiles?: string[];
+  targetDir?: string;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -49,11 +50,19 @@ export interface SublimityElectronBridgeVitePluginOptions {
 // Version is injected at build time by Vite
 declare const __VERSION__: string;
 
+const getTargetDirResolved = (baseDir: string | undefined, targetDir: string | undefined) => {
+  const td = targetDir ?? 'src/main/expose/';
+  return baseDir ? resolve(baseDir, td) : resolve(td);
+};
+
+const getTargetFilePattern = (baseDir: string | undefined, targetDir: string | undefined) => {
+  return join(getTargetDirResolved(baseDir, targetDir), '**/*.ts');
+};
+
 const collectSourceFiles = async (
   baseDir: string | undefined,
    options: SublimityElectronBridgeVitePluginOptions): Promise<string[]> => {
-  const pattern = options.sourceFiles ??
-    'src/main/expose/**/*.ts';   // Default pattern
+  const targetFilePattern = getTargetFilePattern(baseDir, options.targetDir);
   const ignore = [
     '**/node_modules/**', '**/dist/**', '**/*.d.ts',
     ...(options.mainProcessHandlerFile ? [options.mainProcessHandlerFile] : []),
@@ -61,7 +70,7 @@ const collectSourceFiles = async (
     ...(options.typeDefinitionsFile ? [options.typeDefinitionsFile] : [])
   ];
   try {
-    const files = await glob(pattern, { 
+    const files = await glob(targetFilePattern, { 
       ignore,
       cwd: baseDir,
       absolute: true
@@ -250,11 +259,11 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       return;
     }
 
-    const targetSourceFiles = await collectSourceFiles(baseDir, options);
+    const watchTargetDir = getTargetDirResolved(baseDir, options.targetDir);
 
-    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${baseDir}, ${options}, files=${targetSourceFiles.length}`);
+    logger.info(`[seb-vite:watch:${processingCount++}]: Start watching: ${watchTargetDir}`);
 
-    watcher = watch(baseDir, {
+    watcher = watch(watchTargetDir, {
       persistent: true,
       awaitWriteFinish: true,
       interval: 100
@@ -265,15 +274,8 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         case 'add':
         case 'change':
         case 'unlink': {
-          if (targetSourceFiles.includes(filePath)) {
-            logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
-            await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
-          } else {
-            logger.info(`[seb-vite:watch:${pc}]: Ignored: ${event}: ${filePath}`);
-          }
-        }
-        default: {
-          logger.info(`[seb-vite:watch:${pc}]: Ignored: ${event}: ${filePath}`);
+          logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
+          await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
         }
       }
     });
