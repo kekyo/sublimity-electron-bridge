@@ -1,7 +1,6 @@
 import * as ts from 'typescript';
-import { resolve, dirname, basename, join, relative } from 'path';
-import { writeFileSync, mkdirSync, existsSync, renameSync, readFileSync } from 'fs';
-import { randomUUID } from 'crypto';
+import { resolve, dirname, relative } from 'path';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
 import { createConsoleLogger } from '.';
@@ -41,12 +40,15 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
  * @param namespaceGroups - The grouped methods
  * @param baseDir - The base directory
  * @param outputDir - The output directory
+ * @param channelPrefix - Channel prefix
  * @returns The generated code
  * @remarks This function generates the main handlers for the exposed methods.
  */
 const generateMainHandlers = (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir: string | undefined, outputDir: string): string => {
+  baseDir: string | undefined,
+  outputDir: string,
+  channelPrefix: string): string => {
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
@@ -85,14 +87,14 @@ const generateMainHandlers = (
     for (const method of methods) {
       if (method.className) {
         const instanceVar = `${method.className.toLowerCase()}Instance`;
-        const channelName = `api:${namespace}:${method.methodName}`;
+        const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
 
         handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${instanceVar}.${method.methodName}(${params}));`);
       } else {
         // Standalone function
-        const channelName = `api:${namespace}:${method.methodName}`;
+        const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
 
@@ -133,18 +135,20 @@ const generateMainHandlers = (
 /**
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
+ * @param channelPrefix - Channel prefix
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
 const generatePreloadBridge = (
-  namespaceGroups: Map<string, ExposedMethod[]>): string => {
+  namespaceGroups: Map<string, ExposedMethod[]>,
+  channelPrefix: string): string => {
   const bridges: string[] = [];
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
       const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
       const args = method.parameters.map(p => p.name).join(', ');
-      const channelName = `api:${namespace}:${method.methodName}`;
+      const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
       
       return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`;
     }).join(',\n');
@@ -282,7 +286,8 @@ export const createElectronBridgeGenerator =
     typeDefinitionsFile: options.typeDefinitionsFile ?? 'src/renderer/src/generated/seb_types.ts',
     defaultNamespace: options.defaultNamespace ?? 'mainProcess',
     logger: options.logger ?? createConsoleLogger(),
-    baseDir: options.baseDir ?? process.cwd()
+    baseDir: options.baseDir ?? process.cwd(),
+    channelPrefix: options.channelPrefix ?? "seb"
   };
 
   /**
@@ -325,19 +330,28 @@ export const createElectronBridgeGenerator =
     };
 
     // Generate main handlers
-    const mainFilePath = resolveOutputPath(_options.mainProcessHandlerFile);
-    const mainHandlersCode = generateMainHandlers(namespaceGroups, _options.baseDir, dirname(mainFilePath));
-    const wroteMainHandlers = safeWriteFileSync(mainFilePath, mainHandlersCode);
+    const mainFilePath = resolveOutputPath(
+      _options.mainProcessHandlerFile);
+    const mainHandlersCode = generateMainHandlers(
+      namespaceGroups, _options.baseDir, dirname(mainFilePath), _options.channelPrefix);
+    const wroteMainHandlers = safeWriteFileSync(
+      mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
-    const preloadFilePath = resolveOutputPath(_options.preloadHandlerFile);
-    const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
-    const wrotePreloadHandlers = safeWriteFileSync(preloadFilePath, preloadBridgeCode);
+    const preloadFilePath = resolveOutputPath(
+      _options.preloadHandlerFile);
+    const preloadBridgeCode = generatePreloadBridge(
+      namespaceGroups, _options.channelPrefix);
+    const wrotePreloadHandlers = safeWriteFileSync(
+      preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
-    const typeDefsFilePath = resolveOutputPath(_options.typeDefinitionsFile!);
-    const typeDefsCode = generateTypeDefinitions(namespaceGroups);
-    const wroteTypeDefs = safeWriteFileSync(typeDefsFilePath, typeDefsCode);
+    const typeDefsFilePath = resolveOutputPath(
+      _options.typeDefinitionsFile!);
+    const typeDefsCode = generateTypeDefinitions(
+      namespaceGroups);
+    const wroteTypeDefs = safeWriteFileSync(
+      typeDefsFilePath, typeDefsCode);
 
     if (wroteMainHandlers || wrotePreloadHandlers || wroteTypeDefs) {
       _options.logger.info(`Generated files:`);
@@ -345,6 +359,8 @@ export const createElectronBridgeGenerator =
       if (wrotePreloadHandlers) _options.logger.info(`  - ${preloadFilePath}`);
       if (typeDefsFilePath) _options.logger.info(`  - ${typeDefsFilePath}`);
       _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+    } else {
+      _options.logger.info(`Could not found any expose methods`);
     }
   }
 

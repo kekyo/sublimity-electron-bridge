@@ -35,6 +35,11 @@ export interface SublimityElectronBridgeVitePluginOptions {
    */
   defaultNamespace?: string;
   /**
+   * Channel prefix.
+   * @remarks Default: 'seb'
+   */
+  channelPrefix?: string;
+  /**
    * Whether to enable the worker for processing files (Default: true)
    */
   enableWorker?: boolean;
@@ -121,6 +126,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
           preloadHandlerFile: options.preloadHandlerFile,
           typeDefinitionsFile: options.typeDefinitionsFile,
           defaultNamespace: options.defaultNamespace,
+          channelPrefix: options.channelPrefix,
           baseDir: options.baseDir
         },
         filePaths
@@ -161,6 +167,7 @@ const processAllFilesCore = async (
       preloadHandlerFile: options.preloadHandlerFile,
       typeDefinitionsFile: options.typeDefinitionsFile,
       defaultNamespace: options.defaultNamespace,
+      channelPrefix: options.channelPrefix,
       logger,
       baseDir
     };

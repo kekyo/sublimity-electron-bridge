@@ -544,8 +544,8 @@ import { getVersion } from '../src/utils/version';
 const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
+ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -590,10 +590,10 @@ ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path)
+  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path)
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
+  getVersion: () => ipcRenderer.invoke('seb:systemAPI:getVersion')
 });
 `;
       
@@ -887,10 +887,10 @@ import { getVersion } from '../src/utils/system';
 const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('api:systemAPI:getVersion', (_) => getVersion());
-ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
+ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
+ipcMain.handle('seb:utilsAPI:formatDate', (_, date) => formatDate(date));
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -903,14 +903,14 @@ ipcMain.handle('api:utilsAPI:formatDate', (_, date) => formatDate(date));
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
+  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => ipcRenderer.invoke('api:systemAPI:getVersion')
+  getVersion: () => ipcRenderer.invoke('seb:systemAPI:getVersion')
 });
 contextBridge.exposeInMainWorld('utilsAPI', {
-  formatDate: (date: Date) => ipcRenderer.invoke('api:utilsAPI:formatDate', date)
+  formatDate: (date: Date) => ipcRenderer.invoke('seb:utilsAPI:formatDate', date)
 });
 `;
       

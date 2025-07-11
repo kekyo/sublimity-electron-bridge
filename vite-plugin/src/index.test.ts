@@ -94,12 +94,12 @@ import { queryDatabase } from '../test-fixtures/database';
 const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('api:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('api:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
+ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
+ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
+ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
+ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -112,16 +112,16 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('api:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
+  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('api:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('api:mainProcess:getVersion')
+  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
+  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
 });
 `;
     
@@ -210,12 +210,12 @@ import { queryDatabase } from '../test-fixtures/database';
 const fileserviceInstance = new FileService();
 
 // Register IPC handlers
-ipcMain.handle('api:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('api:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('api:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('api:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('api:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
+ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
+ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
+ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
+ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
+ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
+ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -228,16 +228,16 @@ ipcMain.handle('api:mainProcess:getVersion', (_) => getVersion());
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('api:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('api:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('api:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('api:fileAPI:writeFile', path, content)
+  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('api:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('api:mainProcess:getVersion')
+  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
+  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
 });
 `;
     
@@ -512,7 +512,7 @@ import { WatcherTest } from '../test-fixtures/WatcherTest';
 const watchertestInstance = new WatcherTest();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:normalMethod', (_) => watchertestInstance.normalMethod());
+ipcMain.handle('seb:mainProcess:normalMethod', (_) => watchertestInstance.normalMethod());
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -524,7 +524,7 @@ ipcMain.handle('api:mainProcess:normalMethod', (_) => watchertestInstance.normal
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('mainProcess', {
-  normalMethod: () => ipcRenderer.invoke('api:mainProcess:normalMethod')
+  normalMethod: () => ipcRenderer.invoke('seb:mainProcess:normalMethod')
 });
 `;
 
@@ -590,7 +590,7 @@ import { WatcherTest2 } from '../test-fixtures/WatcherTest2';
 const watchertest2Instance = new WatcherTest2();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:decoratedMethod', (_) => watchertest2Instance.decoratedMethod());
+ipcMain.handle('seb:mainProcess:decoratedMethod', (_) => watchertest2Instance.decoratedMethod());
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
