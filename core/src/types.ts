@@ -53,6 +53,11 @@ export interface ElectronBridgeOptions {
    * @remarks It is used to generate relative paths for the generated files.
    */
   baseDir?: string;
+  /**
+   * Channel prefix.
+   * @remarks Default: 'seb'
+   */
+  channelPrefix?: string;
 }
 
 /**

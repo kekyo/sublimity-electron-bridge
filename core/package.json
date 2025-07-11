@@ -1,5 +1,14 @@
 {
   "name": "sublimity-electron-bridge-core",
+  "description": "Core logic for Electron bridge generation",
+  "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
+  "license": "MIT",
+  "keywords": [
+    "electron",
+    "typescript",
+    "ast",
+    "bridge"
+  ],
   "private": true,
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -12,15 +21,6 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "keywords": [
-    "electron",
-    "typescript",
-    "ast",
-    "bridge"
-  ],
-  "author": "",
-  "license": "ISC",
-  "description": "Core logic for Electron bridge generation",
   "dependencies": {
     "typescript": "^5.8.3"
   },

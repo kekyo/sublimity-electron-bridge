@@ -115,10 +115,10 @@ import { getUptime } from '../../system';
 const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('api:mainProcess:getUptime', (_) => getUptime());
-ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+ipcMain.handle('seb:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('seb:mainProcess:getUptime', (_) => getUptime());
+ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -134,14 +134,14 @@ ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('mainProcess', {
-  getCurrentUser: () => ipcRenderer.invoke('api:mainProcess:getCurrentUser'),
-  getUptime: () => ipcRenderer.invoke('api:mainProcess:getUptime')
+  getCurrentUser: () => ipcRenderer.invoke('seb:mainProcess:getCurrentUser'),
+  getUptime: () => ipcRenderer.invoke('seb:mainProcess:getUptime')
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getSystemInfo: () => ipcRenderer.invoke('api:systemAPI:getSystemInfo')
+  getSystemInfo: () => ipcRenderer.invoke('seb:systemAPI:getSystemInfo')
 });
 contextBridge.exposeInMainWorld('userAPI', {
-  getUser: (id: number) => ipcRenderer.invoke('api:userAPI:getUser', id)
+  getUser: (id: number) => ipcRenderer.invoke('seb:userAPI:getUser', id)
 });
 `;
     
@@ -154,6 +154,9 @@ contextBridge.exposeInMainWorld('userAPI', {
     const typeDefs = readFileSync(typeDefsPath, 'utf-8');
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
+
+import type { SystemInfo } from '../../../system';
+import type { User } from '../../../UserService';
 
 interface MainProcess {
   getCurrentUser(): Promise<User | null>;
@@ -211,10 +214,10 @@ import { getUptime } from '../src/system';
 const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('api:mainProcess:getUptime', (_) => getUptime());
-ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+ipcMain.handle('seb:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('seb:mainProcess:getUptime', (_) => getUptime());
+ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -249,10 +252,10 @@ import { getUptime } from '../../system';
 const userserviceInstance = new UserService();
 
 // Register IPC handlers
-ipcMain.handle('api:customAPI:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('api:customAPI:getUptime', (_) => getUptime());
-ipcMain.handle('api:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+ipcMain.handle('seb:customAPI:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
+ipcMain.handle('seb:customAPI:getUptime', (_) => getUptime());
+ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
+ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -260,6 +263,9 @@ ipcMain.handle('api:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     const typeDefs = readFileSync(join(tempDir, 'src/renderer/src/generated/seb_types.ts'), 'utf-8');
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
+
+import type { SystemInfo } from '../../../system';
+import type { User } from '../../../UserService';
 
 interface CustomAPI {
   getCurrentUser(): Promise<User | null>;
