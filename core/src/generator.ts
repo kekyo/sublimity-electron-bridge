@@ -167,16 +167,198 @@ const generatePreloadBridge = (
   ].join('\n');
 };
 
+const primitiveTypes = [
+  'string', 'number', 'boolean', 'void', 'any', 'unknown', 'never',
+  'undefined', 'null', 'object', 'bigint', 'symbol',
+  // Built-in JavaScript types
+  'Date', 'RegExp', 'Error', 'Array', 'Object', 'Function', 'Map', 'Set', 'WeakMap', 'WeakSet',
+  'Promise', 'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
+  'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array',
+  'BigInt64Array', 'BigUint64Array',
+  // TypeScript utility types
+  'Record', 'Partial', 'Required', 'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable',
+  'ReturnType', 'InstanceType', 'ThisParameterType', 'OmitThisParameter', 'ThisType'
+];
+  
+/**
+ * Check if a type is a primitive type that doesn't need import
+ * @param type - The type to check
+ * @returns Whether the type is primitive
+ */
+const isPrimitiveType = (type: string): boolean => {
+  // Check for Promise<primitive> patterns
+  if (type.startsWith('Promise<') && type.endsWith('>')) {
+    const innerType = type.slice(8, -1).trim();
+    return isPrimitiveType(innerType);
+  }
+  
+  // Check for array patterns
+  if (type.endsWith('[]')) {
+    const arrayType = type.slice(0, -2).trim();
+    return isPrimitiveType(arrayType);
+  }
+  
+  // Check for union types with only primitives
+  if (type.includes('|')) {
+    const unionTypes = type.split('|').map(t => t.trim());
+    return unionTypes.every(t => isPrimitiveType(t));
+  }
+  
+  // Remove generic type parameters and array notation for analysis
+  const cleanType = type.replace(/\[.*?\]/g, '').replace(/<.*?>/g, '').trim();
+  
+  // Check if it's a primitive type
+  if (primitiveTypes.includes(cleanType)) {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Extract custom types from a type string
+ * @param type - The type string to analyze
+ * @returns Array of custom type names
+ */
+const extractCustomTypes = (type: string): string[] => {
+  const customTypes: Set<string> = new Set();
+  
+  // Skip if primitive type
+  if (isPrimitiveType(type)) {
+    return [];
+  }
+  
+  // Handle Promise<Type> patterns
+  if (type.startsWith('Promise<') && type.endsWith('>')) {
+    const innerType = type.slice(8, -1).trim();
+    return extractCustomTypes(innerType);
+  }
+  
+  // Handle array patterns
+  if (type.endsWith('[]')) {
+    const arrayType = type.slice(0, -2).trim();
+    return extractCustomTypes(arrayType);
+  }
+  
+  // Handle union types
+  if (type.includes('|')) {
+    const unionTypes = type.split('|').map(t => t.trim());
+    unionTypes.forEach(t => {
+      extractCustomTypes(t).forEach(customType => customTypes.add(customType));
+    });
+    return Array.from(customTypes);
+  }
+  
+  // Handle generic types (e.g., Array<Type>, Map<Key, Value>)
+  const genericMatch = type.match(/^([A-Za-z_][A-Za-z0-9_]*)<(.+)>$/);
+  if (genericMatch) {
+    const [, mainType, typeParams] = genericMatch;
+    
+    // Add main type if not primitive
+    if (!isPrimitiveType(mainType)) {
+      customTypes.add(mainType);
+    }
+    
+    // Parse type parameters
+    const params = typeParams.split(',').map(p => p.trim());
+    params.forEach(param => {
+      extractCustomTypes(param).forEach(customType => customTypes.add(customType));
+    });
+    
+    return Array.from(customTypes);
+  }
+  
+  // Simple type name
+  const typeMatch = type.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
+  if (typeMatch && !isPrimitiveType(type)) {
+    customTypes.add(type);
+  }
+  
+  return Array.from(customTypes);
+};
+
+/**
+ * Generate import statements for custom types
+ * @param namespaceGroups - The grouped methods
+ * @param baseDir - The base directory
+ * @param outputDir - The output directory for type definitions
+ * @returns The import statements
+ */
+const generateTypeImports = (
+  namespaceGroups: Map<string, ExposedMethod[]>,
+  baseDir: string | undefined,
+  outputDir: string): string[] => {
+  const imports = new Set<string>();
+  const typeToFilePath = new Map<string, string>();
+  
+  // Collect all custom types and their file paths
+  for (const methods of namespaceGroups.values()) {
+    for (const method of methods) {
+      // Extract types from parameters
+      method.parameters.forEach(param => {
+        const customTypes = extractCustomTypes(param.type);
+        customTypes.forEach(type => {
+          typeToFilePath.set(type, method.filePath);
+        });
+      });
+      
+      // Extract types from return type
+      const returnTypes = extractCustomTypes(method.returnType);
+      returnTypes.forEach(type => {
+        typeToFilePath.set(type, method.filePath);
+      });
+    }
+  }
+  
+  // Generate import statements
+  const fileToTypes = new Map<string, string[]>();
+  
+  for (const [type, filePath] of typeToFilePath.entries()) {
+    if (!fileToTypes.has(filePath)) {
+      fileToTypes.set(filePath, []);
+    }
+    fileToTypes.get(filePath)!.push(type);
+  }
+  
+  for (const [filePath, types] of fileToTypes.entries()) {
+    // Remove duplicates
+    const uniqueTypes = [...new Set(types)];
+    
+    let importPath = filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
+    
+    // Convert to relative path if baseDir is provided
+    if (baseDir) {
+      const methodFileAbsPath = resolve(baseDir, filePath);
+      importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
+      // Ensure relative path starts with ./ if it doesn't start with ../
+      if (!importPath.startsWith('.')) {
+        importPath = './' + importPath;
+      }
+    }
+    
+    imports.add(`import type { ${uniqueTypes.join(', ')} } from '${importPath}';`);
+  }
+  
+  return Array.from(imports).sort();
+};
+
 /**
  * Generate the type definitions
  * @param namespaceGroups - The grouped methods
+ * @param baseDir - The base directory
+ * @param outputDir - The output directory for type definitions
  * @returns The generated code
  * @remarks This function generates the type definitions for the exposed methods.
  */
 const generateTypeDefinitions = (
-  namespaceGroups: Map<string, ExposedMethod[]>): string => {
+  namespaceGroups: Map<string, ExposedMethod[]>,
+  baseDir: string | undefined,
+  outputDir: string): string => {
   const interfaces: string[] = [];
   const windowProperties: string[] = [];
+  
+  // Generate type imports
+  const typeImports = generateTypeImports(namespaceGroups, baseDir, outputDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const typeName = toPascalCase(namespace);
@@ -190,10 +372,12 @@ const generateTypeDefinitions = (
     windowProperties.push(`    ${namespace}: ${typeName};`);
   }
   
-  return [
+  const result = [
     "// This is auto-generated type definitions by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
+    ...typeImports,
+    typeImports.length > 0 ? '' : null,
     ...interfaces,
     '',
     'declare global {',
@@ -204,7 +388,9 @@ const generateTypeDefinitions = (
     '',
     'export {}',
     ''
-  ].join('\n');
+  ].filter(line => line !== null).join('\n');
+  
+  return result;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -349,7 +535,7 @@ export const createElectronBridgeGenerator =
     const typeDefsFilePath = resolveOutputPath(
       _options.typeDefinitionsFile!);
     const typeDefsCode = generateTypeDefinitions(
-      namespaceGroups);
+      namespaceGroups, _options.baseDir, dirname(typeDefsFilePath));
     const wroteTypeDefs = safeWriteFileSync(
       typeDefsFilePath, typeDefsCode);
 

@@ -155,6 +155,9 @@ contextBridge.exposeInMainWorld('userAPI', {
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
+import type { SystemInfo } from '../../../system';
+import type { User } from '../../../UserService';
+
 interface MainProcess {
   getCurrentUser(): Promise<User | null>;
   getUptime(): Promise<number>;
@@ -260,6 +263,9 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     const typeDefs = readFileSync(join(tempDir, 'src/renderer/src/generated/seb_types.ts'), 'utf-8');
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
+
+import type { SystemInfo } from '../../../system';
+import type { User } from '../../../UserService';
 
 interface CustomAPI {
   getCurrentUser(): Promise<User | null>;

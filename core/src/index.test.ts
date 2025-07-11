@@ -946,4 +946,364 @@ export {}
       expect(typeContent).toBe(expectedTypeContent);
     });
   });
+
+  describe('Type Import Generation', () => {
+    it('should generate import statements for custom types in parameters and return values', () => {
+      const mainFile = join(testOutputDir, 'import-test-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'import-test-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'import-test-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'UserService',
+          methodName: 'getUser',
+          namespace: 'userAPI',
+          parameters: [{ name: 'id', type: 'number' }],
+          returnType: 'Promise<User>',
+          filePath: 'src/services/UserService.ts'
+        },
+        {
+          className: 'UserService',
+          methodName: 'createUser',
+          namespace: 'userAPI',
+          parameters: [{ name: 'userData', type: 'CreateUserRequest' }],
+          returnType: 'Promise<User>',
+          filePath: 'src/services/UserService.ts'
+        },
+        {
+          methodName: 'processOrder',
+          namespace: 'orderAPI',
+          parameters: [
+            { name: 'order', type: 'Order' },
+            { name: 'options', type: 'ProcessOptions' }
+          ],
+          returnType: 'Promise<OrderResult>',
+          filePath: 'src/utils/orderProcessor.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should contain import statements for custom types
+      expect(typeContent).toContain("import type { CreateUserRequest, User } from './src/services/UserService';");
+      expect(typeContent).toContain("import type { Order, ProcessOptions, OrderResult } from './src/utils/orderProcessor';");
+      
+      // Should contain interface definitions
+      expect(typeContent).toContain('interface UserAPI {');
+      expect(typeContent).toContain('interface OrderAPI {');
+      expect(typeContent).toContain('getUser(id: number): Promise<User>;');
+      expect(typeContent).toContain('createUser(userData: CreateUserRequest): Promise<User>;');
+      expect(typeContent).toContain('processOrder(order: Order, options: ProcessOptions): Promise<OrderResult>;');
+      
+      // Should contain window interface
+      expect(typeContent).toContain('userAPI: UserAPI;');
+      expect(typeContent).toContain('orderAPI: OrderAPI;');
+    });
+
+    it('should generate import statements for external package types', () => {
+      const mainFile = join(testOutputDir, 'external-import-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'external-import-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'external-import-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'TypeScriptService',
+          methodName: 'analyzeFile',
+          namespace: 'tsAPI',
+          parameters: [{ name: 'filePath', type: 'string' }],
+          returnType: 'Promise<SourceFile>',
+          filePath: 'src/services/TypeScriptService.ts'
+        },
+        {
+          className: 'TypeScriptService',
+          methodName: 'createProgram',
+          namespace: 'tsAPI',
+          parameters: [
+            { name: 'rootNames', type: 'string[]' },
+            { name: 'options', type: 'CompilerOptions' }
+          ],
+          returnType: 'Promise<Program>',
+          filePath: 'src/services/TypeScriptService.ts'
+        },
+        {
+          methodName: 'getNodeKind',
+          namespace: 'tsAPI',
+          parameters: [{ name: 'node', type: 'Node' }],
+          returnType: 'Promise<SyntaxKind>',
+          filePath: 'src/utils/nodeUtils.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should contain import statements for TypeScript types
+      expect(typeContent).toContain("import type { SourceFile, CompilerOptions, Program } from './src/services/TypeScriptService';");
+      expect(typeContent).toContain("import type { Node, SyntaxKind } from './src/utils/nodeUtils';");
+      
+      // Should contain interface definitions with TypeScript types
+      expect(typeContent).toContain('interface TsAPI {');
+      expect(typeContent).toContain('analyzeFile(filePath: string): Promise<SourceFile>;');
+      expect(typeContent).toContain('createProgram(rootNames: string[], options: CompilerOptions): Promise<Program>;');
+      expect(typeContent).toContain('getNodeKind(node: Node): Promise<SyntaxKind>;');
+      
+      // Should contain window interface
+      expect(typeContent).toContain('tsAPI: TsAPI;');
+    });
+
+    it('should handle complex generic types with custom types', () => {
+      const mainFile = join(testOutputDir, 'generic-import-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'generic-import-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'generic-import-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'DataService',
+          methodName: 'getItems',
+          namespace: 'dataAPI',
+          parameters: [{ name: 'filter', type: 'Filter<Item>' }],
+          returnType: 'Promise<Array<Item>>',
+          filePath: 'src/services/DataService.ts'
+        },
+        {
+          className: 'DataService',
+          methodName: 'getResults',
+          namespace: 'dataAPI',
+          parameters: [{ name: 'query', type: 'string' }],
+          returnType: 'Promise<SearchResult<User | Product>>',
+          filePath: 'src/services/DataService.ts'
+        },
+        {
+          methodName: 'mapData',
+          namespace: 'utilsAPI',
+          parameters: [
+            { name: 'data', type: 'Record<string, DataEntry>' },
+            { name: 'mapper', type: 'Mapper<DataEntry, ResultType>' }
+          ],
+          returnType: 'Promise<ResultType[]>',
+          filePath: 'src/utils/dataMapper.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should contain import statements for custom types extracted from generics
+      expect(typeContent).toContain("import type { Filter, Item } from './src/services/DataService';");
+      expect(typeContent).toContain("import type { Mapper, DataEntry, ResultType } from './src/utils/dataMapper';");
+      
+      // Should contain interface definitions with complex generic types
+      expect(typeContent).toContain('interface DataAPI {');
+      expect(typeContent).toContain('interface UtilsAPI {');
+      expect(typeContent).toContain('getItems(filter: Filter<Item>): Promise<Array<Item>>;');
+      expect(typeContent).toContain('getResults(query: string): Promise<SearchResult<User | Product>>;');
+      expect(typeContent).toContain('mapData(data: Record<string, DataEntry>, mapper: Mapper<DataEntry, ResultType>): Promise<ResultType[]>;');
+    });
+
+    it('should not generate import statements for built-in types', () => {
+      const mainFile = join(testOutputDir, 'builtin-import-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'builtin-import-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'builtin-import-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'BuiltinService',
+          methodName: 'processDate',
+          namespace: 'builtinAPI',
+          parameters: [{ name: 'date', type: 'Date' }],
+          returnType: 'Promise<string>',
+          filePath: 'src/services/BuiltinService.ts'
+        },
+        {
+          className: 'BuiltinService',
+          methodName: 'processArray',
+          namespace: 'builtinAPI',
+          parameters: [{ name: 'items', type: 'Array<string>' }],
+          returnType: 'Promise<number>',
+          filePath: 'src/services/BuiltinService.ts'
+        },
+        {
+          methodName: 'processMap',
+          namespace: 'builtinAPI',
+          parameters: [{ name: 'data', type: 'Map<string, number>' }],
+          returnType: 'Promise<Record<string, boolean>>',
+          filePath: 'src/utils/builtinUtils.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should NOT contain import statements for built-in types
+      expect(typeContent).not.toContain('import type { Date }');
+      expect(typeContent).not.toContain('import type { Array }');
+      expect(typeContent).not.toContain('import type { Map }');
+      expect(typeContent).not.toContain('import type { Record }');
+      expect(typeContent).not.toContain('import type { Promise }');
+      
+      // Should contain interface definitions with built-in types
+      expect(typeContent).toContain('interface BuiltinAPI {');
+      expect(typeContent).toContain('processDate(date: Date): Promise<string>;');
+      expect(typeContent).toContain('processArray(items: Array<string>): Promise<number>;');
+      expect(typeContent).toContain('processMap(data: Map<string, number>): Promise<Record<string, boolean>>;');
+      
+      // Should contain window interface
+      expect(typeContent).toContain('builtinAPI: BuiltinAPI;');
+    });
+
+    it('should handle mixed custom and built-in types correctly', () => {
+      const mainFile = join(testOutputDir, 'mixed-import-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'mixed-import-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'mixed-import-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'MixedService',
+          methodName: 'processUserData',
+          namespace: 'mixedAPI',
+          parameters: [
+            { name: 'user', type: 'User' },
+            { name: 'timestamp', type: 'Date' },
+            { name: 'metadata', type: 'Record<string, UserMetadata>' }
+          ],
+          returnType: 'Promise<ProcessedUser>',
+          filePath: 'src/services/MixedService.ts'
+        },
+        {
+          methodName: 'validateConfig',
+          namespace: 'mixedAPI',
+          parameters: [{ name: 'config', type: 'AppConfig | string' }],
+          returnType: 'Promise<ValidationResult>',
+          filePath: 'src/utils/configValidator.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should contain import statements for custom types only
+      expect(typeContent).toContain("import type { User, ProcessedUser } from './src/services/MixedService';");
+      expect(typeContent).toContain("import type { AppConfig, ValidationResult } from './src/utils/configValidator';");
+      
+      // Should NOT contain import statements for built-in types
+      expect(typeContent).not.toContain('import type { Date }');
+      expect(typeContent).not.toContain('import type { Record }');
+      expect(typeContent).not.toContain('import type { Promise }');
+      
+      // Should contain interface definitions with mixed types
+      expect(typeContent).toContain('interface MixedAPI {');
+      expect(typeContent).toContain('processUserData(user: User, timestamp: Date, metadata: Record<string, UserMetadata>): Promise<ProcessedUser>;');
+      expect(typeContent).toContain('validateConfig(config: AppConfig | string): Promise<ValidationResult>;');
+      
+      // Should contain window interface
+      expect(typeContent).toContain('mixedAPI: MixedAPI;');
+    });
+
+    it('should generate import statements for types from separate definition files', () => {
+      const mainFile = join(testOutputDir, 'separate-types-main', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'separate-types-preload', 'bridge.ts');
+      const typeDefFile = join(testOutputDir, 'separate-types.d.ts');
+      
+      const generator = createElectronBridgeGenerator({
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testOutputDir
+      });
+      
+      const methods = [
+        {
+          className: 'UserService',
+          methodName: 'createUser',
+          namespace: 'userAPI',
+          parameters: [{ name: 'userData', type: 'UserCreateRequest' }],
+          returnType: 'Promise<User>',
+          filePath: 'src/services/UserService.ts'
+        },
+        {
+          className: 'ProductService',
+          methodName: 'findProduct',
+          namespace: 'productAPI',
+          parameters: [{ name: 'criteria', type: 'ProductSearchCriteria' }],
+          returnType: 'Promise<Product[]>',
+          filePath: 'src/services/ProductService.ts'
+        },
+        {
+          methodName: 'processOrder',
+          namespace: 'orderAPI',
+          parameters: [
+            { name: 'order', type: 'OrderRequest' },
+            { name: 'payment', type: 'PaymentInfo' }
+          ],
+          returnType: 'Promise<OrderResult>',
+          filePath: 'src/processors/orderProcessor.ts'
+        }
+      ];
+      
+      generator.generateFiles(methods);
+      
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+      
+      // Should contain import statements for custom types from separate files
+      expect(typeContent).toContain("import type { UserCreateRequest, User } from './src/services/UserService';");
+      expect(typeContent).toContain("import type { ProductSearchCriteria, Product } from './src/services/ProductService';");
+      expect(typeContent).toContain("import type { OrderRequest, PaymentInfo, OrderResult } from './src/processors/orderProcessor';");
+      
+      // Should contain interface definitions
+      expect(typeContent).toContain('interface UserAPI {');
+      expect(typeContent).toContain('interface ProductAPI {');
+      expect(typeContent).toContain('interface OrderAPI {');
+      
+      // Should contain methods with imported types
+      expect(typeContent).toContain('createUser(userData: UserCreateRequest): Promise<User>;');
+      expect(typeContent).toContain('findProduct(criteria: ProductSearchCriteria): Promise<Product[]>;');
+      expect(typeContent).toContain('processOrder(order: OrderRequest, payment: PaymentInfo): Promise<OrderResult>;');
+      
+      // Should contain window interface
+      expect(typeContent).toContain('userAPI: UserAPI;');
+      expect(typeContent).toContain('productAPI: ProductAPI;');
+      expect(typeContent).toContain('orderAPI: OrderAPI;');
+    });
+  });
 });
