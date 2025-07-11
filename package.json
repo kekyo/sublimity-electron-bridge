@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge",
-  "version": "0.14.4",
+  "version": "0.15.1",
   "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
   "license": "MIT",
   "private": true,

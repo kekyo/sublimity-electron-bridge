@@ -132,6 +132,8 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import type { SystemInfo } from '../../system';
+import type { User } from '../../UserService';
 
 contextBridge.exposeInMainWorld('mainProcess', {
   getCurrentUser: () => ipcRenderer.invoke('seb:mainProcess:getCurrentUser'),

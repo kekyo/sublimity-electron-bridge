@@ -136,13 +136,20 @@ const generateMainHandlers = (
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
  * @param channelPrefix - Channel prefix
+ * @param baseDir - The base directory
+ * @param outputDir - The output directory for preload file
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
 const generatePreloadBridge = (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  channelPrefix: string): string => {
+  channelPrefix: string,
+  baseDir: string | undefined,
+  outputDir: string): string => {
   const bridges: string[] = [];
+  
+  // Generate type imports for preload
+  const typeImports = generateTypeImports(namespaceGroups, baseDir, outputDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
@@ -156,15 +163,23 @@ const generatePreloadBridge = (
     bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n});`);
   }
   
-  return [
+  const result = [
     "// This is auto-generated preloader by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
     "import { contextBridge, ipcRenderer } from 'electron';",
-    '',
+    ...typeImports,
+    typeImports.length > 0 ? '' : null,
     ...bridges,
     ''
-  ].join('\n');
+  ].filter(line => line !== null);
+  
+  // Ensure there's always a blank line after imports even if no type imports
+  if (typeImports.length === 0) {
+    result.splice(4, 0, '');
+  }
+  
+  return result.join('\n');
 };
 
 const primitiveTypes = [
@@ -527,7 +542,7 @@ export const createElectronBridgeGenerator =
     const preloadFilePath = resolveOutputPath(
       _options.preloadHandlerFile);
     const preloadBridgeCode = generatePreloadBridge(
-      namespaceGroups, _options.channelPrefix);
+      namespaceGroups, _options.channelPrefix, _options.baseDir, dirname(preloadFilePath));
     const wrotePreloadHandlers = safeWriteFileSync(
       preloadFilePath, preloadBridgeCode);
 

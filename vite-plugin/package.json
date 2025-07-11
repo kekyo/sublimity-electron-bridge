@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.14.4",
+  "version": "0.15.1",
   "description": "Electron bridge generator for automatic IPC setup",
   "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
   "license": "MIT",

@@ -1284,6 +1284,7 @@ export {}
       generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
+      const preloadContent = readFileSync(preloadFile, 'utf8');
       
       // Should contain import statements for custom types from separate files
       expect(typeContent).toContain("import type { UserCreateRequest, User } from './src/services/UserService';");
@@ -1304,6 +1305,16 @@ export {}
       expect(typeContent).toContain('userAPI: UserAPI;');
       expect(typeContent).toContain('productAPI: ProductAPI;');
       expect(typeContent).toContain('orderAPI: OrderAPI;');
+      
+      // Preload file should also contain import statements for custom types
+      expect(preloadContent).toContain("import type { UserCreateRequest, User } from '../src/services/UserService';");
+      expect(preloadContent).toContain("import type { ProductSearchCriteria, Product } from '../src/services/ProductService';");
+      expect(preloadContent).toContain("import type { OrderRequest, PaymentInfo, OrderResult } from '../src/processors/orderProcessor';");
+      
+      // Preload file should contain typed method signatures
+      expect(preloadContent).toContain('createUser: (userData: UserCreateRequest) => ipcRenderer.invoke');
+      expect(preloadContent).toContain('findProduct: (criteria: ProductSearchCriteria) => ipcRenderer.invoke');
+      expect(preloadContent).toContain('processOrder: (order: OrderRequest, payment: PaymentInfo) => ipcRenderer.invoke');
     });
   });
 });
