@@ -75,9 +75,9 @@ export interface TypeInfo {
  */
 export interface ExposedMethod {
   /**
-   * The class name of the method
+   * The declared type of the method
    */
-  readonly className?: TypeInfo
+  readonly declaredType?: TypeInfo
   /**
    * The method name
    */

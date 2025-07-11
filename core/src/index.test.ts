@@ -91,7 +91,7 @@ describe('ElectronBridgeCore', () => {
       expect(methods).toHaveLength(2);
       
       expect(methods[0]).toMatchObject({
-        className: { name: 'FileService' },
+        declaredType: { name: 'FileService' },
         methodName: 'readFile',
         namespace: 'fileAPI',
         parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -99,7 +99,7 @@ describe('ElectronBridgeCore', () => {
       });
       
       expect(methods[1]).toMatchObject({
-        className: { name: 'FileService' },
+        declaredType: { name: 'FileService' },
         methodName: 'writeFile',
         namespace: 'electronAPI', // default namespace
         parameters: [
@@ -187,8 +187,8 @@ describe('ElectronBridgeCore', () => {
       const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
-      expect(methods[0].className).toEqual({ name: 'UserService' });
-      expect(methods[1].className).toBeUndefined();
+      expect(methods[0].declaredType).toEqual({ name: 'UserService' });
+      expect(methods[1].declaredType).toBeUndefined();
     })
 
     it('should extract arrow functions with variable binding', async () => {
@@ -335,7 +335,7 @@ describe('ElectronBridgeCore', () => {
       
       // Both methods should use the custom default namespace
       expect(methods[0]).toMatchObject({
-        className: { name: 'TestService' },
+        declaredType: { name: 'TestService' },
         methodName: 'getTest',
         namespace: 'customAPI',
         returnType: { name: 'Promise<string>' }
@@ -372,7 +372,7 @@ describe('ElectronBridgeCore', () => {
       
       expect(methods).toHaveLength(1);
       expect(methods[0]).toMatchObject({
-        className: { name: 'FileService' },
+        declaredType: { name: 'FileService' },
         methodName: 'readFile',
         namespace: 'fileAPI',
         filePath: 'src/services/FileService.ts'
@@ -482,7 +482,7 @@ describe('ElectronBridgeCore', () => {
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -513,7 +513,7 @@ describe('ElectronBridgeCore', () => {
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -564,7 +564,7 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -613,7 +613,7 @@ contextBridge.exposeInMainWorld('systemAPI', {
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -671,7 +671,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -749,7 +749,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -764,7 +764,7 @@ export {}
           filePath: 'src/utils/version.ts'
         },
         {
-          className: { name: 'DatabaseService' },
+          declaredType: { name: 'DatabaseService' },
           methodName: 'query',
           namespace: 'dbAPI',
           parameters: [{ name: 'sql', type: { name: 'string' } }],
@@ -796,7 +796,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -804,7 +804,7 @@ export {}
           filePath: 'src/services/FileService.ts'
         },
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'writeFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }, { name: 'content', type: { name: 'string' } }],
@@ -840,7 +840,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }],
@@ -848,7 +848,7 @@ export {}
           filePath: 'src/services/FileService.ts'
         },
         {
-          className: { name: 'FileService' },
+          declaredType: { name: 'FileService' },
           methodName: 'writeFile',
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: { name: 'string' } }, { name: 'content', type: { name: 'string' } }],
@@ -962,7 +962,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'UserService' },
+          declaredType: { name: 'UserService' },
           methodName: 'getUser',
           namespace: 'userAPI',
           parameters: [{ name: 'id', type: { name: 'number' } }],
@@ -970,7 +970,7 @@ export {}
           filePath: 'src/services/UserService.ts'
         },
         {
-          className: { name: 'UserService' },
+          declaredType: { name: 'UserService' },
           methodName: 'createUser',
           namespace: 'userAPI',
           parameters: [{ name: 'userData', type: { name: 'CreateUserRequest' } }],
@@ -1023,7 +1023,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'TypeScriptService' },
+          declaredType: { name: 'TypeScriptService' },
           methodName: 'analyzeFile',
           namespace: 'tsAPI',
           parameters: [{ name: 'filePath', type: { name: 'string' } }],
@@ -1031,7 +1031,7 @@ export {}
           filePath: 'src/services/TypeScriptService.ts'
         },
         {
-          className: { name: 'TypeScriptService' },
+          declaredType: { name: 'TypeScriptService' },
           methodName: 'createProgram',
           namespace: 'tsAPI',
           parameters: [
@@ -1082,7 +1082,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'DataService' },
+          declaredType: { name: 'DataService' },
           methodName: 'getItems',
           namespace: 'dataAPI',
           parameters: [{ name: 'filter', type: { name: 'Filter<Item>' } }],
@@ -1090,7 +1090,7 @@ export {}
           filePath: 'src/services/DataService.ts'
         },
         {
-          className: { name: 'DataService' },
+          declaredType: { name: 'DataService' },
           methodName: 'getResults',
           namespace: 'dataAPI',
           parameters: [{ name: 'query', type: { name: 'string' } }],
@@ -1139,7 +1139,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'BuiltinService' },
+          declaredType: { name: 'BuiltinService' },
           methodName: 'processDate',
           namespace: 'builtinAPI',
           parameters: [{ name: 'date', type: { name: 'Date' } }],
@@ -1147,7 +1147,7 @@ export {}
           filePath: 'src/services/BuiltinService.ts'
         },
         {
-          className: { name: 'BuiltinService' },
+          declaredType: { name: 'BuiltinService' },
           methodName: 'processArray',
           namespace: 'builtinAPI',
           parameters: [{ name: 'items', type: { name: 'Array<string>' } }],
@@ -1198,7 +1198,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'MixedService' },
+          declaredType: { name: 'MixedService' },
           methodName: 'processUserData',
           namespace: 'mixedAPI',
           parameters: [
@@ -1254,7 +1254,7 @@ export {}
       
       const methods = [
         {
-          className: { name: 'UserService' },
+          declaredType: { name: 'UserService' },
           methodName: 'createUser',
           namespace: 'userAPI',
           parameters: [{ name: 'userData', type: { name: 'UserCreateRequest' } }],
@@ -1262,7 +1262,7 @@ export {}
           filePath: 'src/services/UserService.ts'
         },
         {
-          className: { name: 'ProductService' },
+          declaredType: { name: 'ProductService' },
           methodName: 'findProduct',
           namespace: 'productAPI',
           parameters: [{ name: 'criteria', type: { name: 'ProductSearchCriteria' } }],

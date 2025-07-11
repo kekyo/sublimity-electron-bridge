@@ -57,7 +57,7 @@ const generateMainHandlers = async (
   // Generate imports and collect unique class names
   for (const methods of namespaceGroups.values()) {
     for (const method of methods) {
-      if (method.className) {
+      if (method.declaredType) {
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
         
         // Convert to relative path if baseDir are provided
@@ -70,23 +70,23 @@ const generateMainHandlers = async (
           }
         }
         
-        imports.add(`import { ${method.className.name} } from '${importPath}';`);
-        singletonInstances.add(method.className.name);
+        imports.add(`import { ${method.declaredType.name} } from '${importPath}';`);
+        singletonInstances.add(method.declaredType.name);
       }
     }
   }
 
   // Generate singleton instance declarations
   const instanceDeclarations: string[] = [];
-  for (const className of Array.from(singletonInstances).sort()) {
-    const instanceVar = `${className.toLowerCase()}Instance`;
-    instanceDeclarations.push(`const ${instanceVar} = new ${className}();`);
+  for (const typeName of Array.from(singletonInstances).sort()) {
+    const instanceVar = `${typeName.toLowerCase()}Instance`;
+    instanceDeclarations.push(`const ${instanceVar} = new ${typeName}();`);
   }
 
   for (const [namespace, methods] of namespaceGroups.entries()) {
     for (const method of methods) {
-      if (method.className) {
-        const instanceVar = `${method.className.name.toLowerCase()}Instance`;
+      if (method.declaredType) {
+        const instanceVar = `${method.declaredType.name.toLowerCase()}Instance`;
         const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';

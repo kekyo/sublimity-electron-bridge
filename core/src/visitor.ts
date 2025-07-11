@@ -29,11 +29,11 @@ export const toPascalCase = (str: string): string => {
  * @param filePath - The path to the source file
  * @param methodName - The name of the method
  * @param defaultNamespace - The default namespace for the exposed methods
- * @param className - The name of the class
+ * @param declaredType - The name of the declared type/class
  * @returns The namespace of the exposed method
  */
 const processJSDocTag =
-  (logger: Logger, node: ts.Node, sourceFile: ts.SourceFile, filePath: string, methodName: string, defaultNamespace: string, className?: string):
+  (logger: Logger, node: ts.Node, sourceFile: ts.SourceFile, filePath: string, methodName: string, defaultNamespace: string, declaredType?: string):
   { namespace: string } | null => {
   const jsDocTags = ts.getJSDocTags(node);
   
@@ -45,7 +45,7 @@ const processJSDocTag =
       if (match) {
         const namespace = match[1];
         if (!isCamelCase(namespace)) {
-          const location = className ? `${className}.${methodName}` : methodName;
+          const location = declaredType ? `${declaredType}.${methodName}` : methodName;
           logger.warn(`Warning: @decorator expose argument should be camelCase: "${namespace}" in ${location} at ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
           return null; // Skip this method
         }
@@ -92,12 +92,12 @@ export const extractExposedMethods = async (
   const visit = (node: ts.Node) => {
     // Handle class methods
     if (ts.isClassDeclaration(node) && node.name) {
-      const className = node.name.text;
+      const declaredTypeName = node.name.text;
       
       node.members.forEach(member => {
         if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
           const exposedMethod = processJSDocTag(
-            logger, member, sourceFile, filePath, (member.name as ts.Identifier).text, defaultNamespace, className);
+            logger, member, sourceFile, filePath, (member.name as ts.Identifier).text, defaultNamespace, declaredTypeName);
           if (exposedMethod) {
             const parameters = member.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
@@ -116,12 +116,12 @@ export const extractExposedMethods = async (
             
             // Check if method returns Promise
             if (member.type && !isPromiseType(member.type)) {
-              logger.warn(`Warning: @decorator expose method should return Promise: ${className}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
+              logger.warn(`Warning: @decorator expose method should return Promise: ${declaredTypeName}.${(member.name as ts.Identifier).text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, member.pos).line + 1}`)
               return // Skip this method
             };
             
             methods.push({
-              className: { name: className },
+              declaredType: { name: declaredTypeName },
               methodName: (member.name as ts.Identifier).text,
               namespace: exposedMethod.namespace,
               parameters,
