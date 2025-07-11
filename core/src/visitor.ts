@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { Logger, ExposedMethod } from './types';
+import { Logger, ExposedMethod, TypeInfo } from './types';
 
 /**
  * Check if a string is camelCase
@@ -101,14 +101,18 @@ export const extractExposedMethods = async (
           if (exposedMethod) {
             const parameters = member.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: param.type ?
-                sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-                'any'
+              type: {
+                name: param.type ?
+                  sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+                  'any'
+              }
             }));
             
-            const returnType = member.type ?
-              sourceFile.text.substring(member.type.pos, member.type.end).trim() :
-              'Promise<any>';
+            const returnType: TypeInfo = {
+              name: member.type ?
+                sourceFile.text.substring(member.type.pos, member.type.end).trim() :
+                'Promise<any>'
+            };
             
             // Check if method returns Promise
             if (member.type && !isPromiseType(member.type)) {
@@ -117,7 +121,7 @@ export const extractExposedMethods = async (
             };
             
             methods.push({
-              className,
+              className: { name: className },
               methodName: (member.name as ts.Identifier).text,
               namespace: exposedMethod.namespace,
               parameters,
@@ -135,14 +139,18 @@ export const extractExposedMethods = async (
       if (exposedMethod) {
         const parameters = node.parameters.map(param => ({
           name: (param.name as ts.Identifier).text,
-          type: param.type ?
-            sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-            'any'
+          type: {
+            name: param.type ?
+              sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+              'any'
+          }
         }));
 
-        const returnType = node.type ?
-          sourceFile.text.substring(node.type.pos, node.type.end).trim() :
-          'Promise<any>';
+        const returnType: TypeInfo = {
+          name: node.type ?
+            sourceFile.text.substring(node.type.pos, node.type.end).trim() :
+            'Promise<any>'
+        };
 
         // Check if function returns Promise
         if (node.type && !isPromiseType(node.type)) {
@@ -173,14 +181,18 @@ export const extractExposedMethods = async (
             const arrowFunc = declaration.initializer;
             const parameters = arrowFunc.parameters.map(param => ({
               name: (param.name as ts.Identifier).text,
-              type: param.type ?
-                sourceFile.text.substring(param.type.pos, param.type.end).trim() :
-                'any'
+              type: {
+                name: param.type ?
+                  sourceFile.text.substring(param.type.pos, param.type.end).trim() :
+                  'any'
+              }
             }));
             
-            const returnType = arrowFunc.type ?
-              sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() :
-              'Promise<any>';
+            const returnType: TypeInfo = {
+              name: arrowFunc.type ?
+                sourceFile.text.substring(arrowFunc.type.pos, arrowFunc.type.end).trim() :
+                'Promise<any>'
+            };
             
             // Check if arrow function returns Promise
             if (arrowFunc.type && !isPromiseType(arrowFunc.type)) {

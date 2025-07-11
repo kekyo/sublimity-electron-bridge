@@ -70,8 +70,8 @@ const generateMainHandlers = async (
           }
         }
         
-        imports.add(`import { ${method.className} } from '${importPath}';`);
-        singletonInstances.add(method.className);
+        imports.add(`import { ${method.className.name} } from '${importPath}';`);
+        singletonInstances.add(method.className.name);
       }
     }
   }
@@ -86,7 +86,7 @@ const generateMainHandlers = async (
   for (const [namespace, methods] of namespaceGroups.entries()) {
     for (const method of methods) {
       if (method.className) {
-        const instanceVar = `${method.className.toLowerCase()}Instance`;
+        const instanceVar = `${method.className.name.toLowerCase()}Instance`;
         const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
         const args = method.parameters.length > 0 ? `, ${params}` : '';
@@ -153,7 +153,7 @@ const generatePreloadBridge = async (
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
+      const params = method.parameters.map(p => `${p.name}: ${p.type.name}`).join(', ');
       const args = method.parameters.map(p => p.name).join(', ');
       const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
       
@@ -311,14 +311,14 @@ const generateTypeImports = async (
     for (const method of methods) {
       // Extract types from parameters
       method.parameters.forEach(param => {
-        const customTypes = extractCustomTypes(param.type);
+        const customTypes = extractCustomTypes(param.type.name);
         customTypes.forEach(type => {
           typeToFilePath.set(type, method.filePath);
         });
       });
       
       // Extract types from return type
-      const returnTypes = extractCustomTypes(method.returnType);
+      const returnTypes = extractCustomTypes(method.returnType.name);
       returnTypes.forEach(type => {
         typeToFilePath.set(type, method.filePath);
       });
@@ -379,8 +379,8 @@ const generateTypeDefinitions = async (
     const typeName = toPascalCase(namespace);
 
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-      return `  ${method.methodName}(${params}): ${method.returnType};`;
+      const params = method.parameters.map(p => `${p.name}: ${p.type.name}`).join(', ');
+      return `  ${method.methodName}(${params}): ${method.returnType.name};`;
     }).join('\n');
     
     interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);

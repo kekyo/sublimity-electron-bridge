@@ -61,13 +61,23 @@ export interface ElectronBridgeOptions {
 }
 
 /**
+ * Type information interface
+ */
+export interface TypeInfo {
+  /**
+   * The name of the type
+   */
+  readonly name: string;
+}
+
+/**
  * Exposed method interface
  */
 export interface ExposedMethod {
   /**
    * The class name of the method
    */
-  readonly className?: string
+  readonly className?: TypeInfo
   /**
    * The method name
    */
@@ -79,11 +89,11 @@ export interface ExposedMethod {
   /**
    * The parameters of the method
    */
-  readonly parameters: { name: string; type: string }[]
+  readonly parameters: { name: string; type: TypeInfo }[]
   /**
    * The return type of the method
    */
-  readonly returnType: string
+  readonly returnType: TypeInfo
   /**
    * The file path of the method
    */

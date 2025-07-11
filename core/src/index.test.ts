@@ -91,22 +91,22 @@ describe('ElectronBridgeCore', () => {
       expect(methods).toHaveLength(2);
       
       expect(methods[0]).toMatchObject({
-        className: 'FileService',
+        className: { name: 'FileService' },
         methodName: 'readFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: 'string' }],
-        returnType: 'Promise<string>'
+        parameters: [{ name: 'path', type: { name: 'string' } }],
+        returnType: { name: 'Promise<string>' }
       });
       
       expect(methods[1]).toMatchObject({
-        className: 'FileService',
+        className: { name: 'FileService' },
         methodName: 'writeFile',
         namespace: 'electronAPI', // default namespace
         parameters: [
-          { name: 'path', type: 'string' },
-          { name: 'content', type: 'string' }
+          { name: 'path', type: { name: 'string' } },
+          { name: 'content', type: { name: 'string' } }
         ],
-        returnType: 'Promise<void>'
+        returnType: { name: 'Promise<void>' }
       });
     });
 
@@ -145,15 +145,15 @@ describe('ElectronBridgeCore', () => {
       expect(methods[0]).toMatchObject({
         methodName: 'queryDatabase',
         namespace: 'databaseAPI',
-        parameters: [{ name: 'sql', type: 'string' }],
-        returnType: 'Promise<any[]>'
+        parameters: [{ name: 'sql', type: { name: 'string' } }],
+        returnType: { name: 'Promise<any[]>' }
       });
       
       expect(methods[1]).toMatchObject({
         methodName: 'getVersion',
         namespace: 'electronAPI',
         parameters: [],
-        returnType: 'Promise<string>'
+        returnType: { name: 'Promise<string>' }
       });
     });
 
@@ -187,7 +187,7 @@ describe('ElectronBridgeCore', () => {
       const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
-      expect(methods[0].className).toBe('UserService');
+      expect(methods[0].className).toEqual({ name: 'UserService' });
       expect(methods[1].className).toBeUndefined();
     })
 
@@ -224,14 +224,14 @@ describe('ElectronBridgeCore', () => {
         methodName: 'getSystemInfo',
         namespace: 'utilsAPI',
         parameters: [],
-        returnType: 'Promise<SystemInfo>'
+        returnType: { name: 'Promise<SystemInfo>' }
       });
       
       expect(methods[1]).toMatchObject({
         methodName: 'processData',
         namespace: 'electronAPI',
-        parameters: [{ name: 'data', type: 'string' }],
-        returnType: 'Promise<string>'
+        parameters: [{ name: 'data', type: { name: 'string' } }],
+        returnType: { name: 'Promise<string>' }
       });
     });
   });
@@ -335,16 +335,16 @@ describe('ElectronBridgeCore', () => {
       
       // Both methods should use the custom default namespace
       expect(methods[0]).toMatchObject({
-        className: 'TestService',
+        className: { name: 'TestService' },
         methodName: 'getTest',
         namespace: 'customAPI',
-        returnType: 'Promise<string>'
+        returnType: { name: 'Promise<string>' }
       });
       
       expect(methods[1]).toMatchObject({
         methodName: 'getInfo',
         namespace: 'customAPI',
-        returnType: 'Promise<string>'
+        returnType: { name: 'Promise<string>' }
       });
     });
   });
@@ -372,7 +372,7 @@ describe('ElectronBridgeCore', () => {
       
       expect(methods).toHaveLength(1);
       expect(methods[0]).toMatchObject({
-        className: 'FileService',
+        className: { name: 'FileService' },
         methodName: 'readFile',
         namespace: 'fileAPI',
         filePath: 'src/services/FileService.ts'
@@ -482,11 +482,11 @@ describe('ElectronBridgeCore', () => {
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         }
       ];
@@ -513,18 +513,18 @@ describe('ElectronBridgeCore', () => {
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
-          returnType: 'Promise<string>',
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/utils/version.ts'
         }
       ];
@@ -564,18 +564,18 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
-          returnType: 'Promise<string>',
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/utils/version.ts'
         }
       ];
@@ -613,21 +613,21 @@ contextBridge.exposeInMainWorld('systemAPI', {
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
           methodName: 'writeFile',
           namespace: 'fileAPI',
           parameters: [
-            { name: 'path', type: 'string' },
-            { name: 'content', type: 'string' }
+            { name: 'path', type: { name: 'string' } },
+            { name: 'content', type: { name: 'string' } }
           ],
-          returnType: 'Promise<void>',
+          returnType: { name: 'Promise<void>' },
           filePath: 'src/services/FileService.ts'
         }
       ];
@@ -671,11 +671,11 @@ export {}
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         }
       ];
@@ -749,26 +749,26 @@ export {}
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
-          returnType: 'Promise<string>',
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/utils/version.ts'
         },
         {
-          className: 'DatabaseService',
+          className: { name: 'DatabaseService' },
           methodName: 'query',
           namespace: 'dbAPI',
-          parameters: [{ name: 'sql', type: 'string' }],
-          returnType: 'Promise<any[]>',
+          parameters: [{ name: 'sql', type: { name: 'string' } }],
+          returnType: { name: 'Promise<any[]>' },
           filePath: 'src/services/DatabaseService.ts'
         }
       ];
@@ -796,19 +796,19 @@ export {}
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'writeFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
-          returnType: 'Promise<void>',
+          parameters: [{ name: 'path', type: { name: 'string' } }, { name: 'content', type: { name: 'string' } }],
+          returnType: { name: 'Promise<void>' },
           filePath: 'src/services/FileService.ts'
         }
       ];
@@ -840,33 +840,33 @@ export {}
       
       const methods = [
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'readFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'path', type: { name: 'string' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/FileService.ts'
         },
         {
-          className: 'FileService',
+          className: { name: 'FileService' },
           methodName: 'writeFile',
           namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
-          returnType: 'Promise<void>',
+          parameters: [{ name: 'path', type: { name: 'string' } }, { name: 'content', type: { name: 'string' } }],
+          returnType: { name: 'Promise<void>' },
           filePath: 'src/services/FileService.ts'
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
-          returnType: 'Promise<string>',
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/utils/system.ts'
         },
         {
           methodName: 'formatDate',
           namespace: 'utilsAPI',
-          parameters: [{ name: 'date', type: 'Date' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'date', type: { name: 'Date' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/utils/format.ts'
         }
       ];
@@ -962,29 +962,29 @@ export {}
       
       const methods = [
         {
-          className: 'UserService',
+          className: { name: 'UserService' },
           methodName: 'getUser',
           namespace: 'userAPI',
-          parameters: [{ name: 'id', type: 'number' }],
-          returnType: 'Promise<User>',
+          parameters: [{ name: 'id', type: { name: 'number' } }],
+          returnType: { name: 'Promise<User>' },
           filePath: 'src/services/UserService.ts'
         },
         {
-          className: 'UserService',
+          className: { name: 'UserService' },
           methodName: 'createUser',
           namespace: 'userAPI',
-          parameters: [{ name: 'userData', type: 'CreateUserRequest' }],
-          returnType: 'Promise<User>',
+          parameters: [{ name: 'userData', type: { name: 'CreateUserRequest' } }],
+          returnType: { name: 'Promise<User>' },
           filePath: 'src/services/UserService.ts'
         },
         {
           methodName: 'processOrder',
           namespace: 'orderAPI',
           parameters: [
-            { name: 'order', type: 'Order' },
-            { name: 'options', type: 'ProcessOptions' }
+            { name: 'order', type: { name: 'Order' } },
+            { name: 'options', type: { name: 'ProcessOptions' } }
           ],
-          returnType: 'Promise<OrderResult>',
+          returnType: { name: 'Promise<OrderResult>' },
           filePath: 'src/utils/orderProcessor.ts'
         }
       ];
@@ -1023,29 +1023,29 @@ export {}
       
       const methods = [
         {
-          className: 'TypeScriptService',
+          className: { name: 'TypeScriptService' },
           methodName: 'analyzeFile',
           namespace: 'tsAPI',
-          parameters: [{ name: 'filePath', type: 'string' }],
-          returnType: 'Promise<SourceFile>',
+          parameters: [{ name: 'filePath', type: { name: 'string' } }],
+          returnType: { name: 'Promise<SourceFile>' },
           filePath: 'src/services/TypeScriptService.ts'
         },
         {
-          className: 'TypeScriptService',
+          className: { name: 'TypeScriptService' },
           methodName: 'createProgram',
           namespace: 'tsAPI',
           parameters: [
-            { name: 'rootNames', type: 'string[]' },
-            { name: 'options', type: 'CompilerOptions' }
+            { name: 'rootNames', type: { name: 'string[]' } },
+            { name: 'options', type: { name: 'CompilerOptions' } }
           ],
-          returnType: 'Promise<Program>',
+          returnType: { name: 'Promise<Program>' },
           filePath: 'src/services/TypeScriptService.ts'
         },
         {
           methodName: 'getNodeKind',
           namespace: 'tsAPI',
-          parameters: [{ name: 'node', type: 'Node' }],
-          returnType: 'Promise<SyntaxKind>',
+          parameters: [{ name: 'node', type: { name: 'Node' } }],
+          returnType: { name: 'Promise<SyntaxKind>' },
           filePath: 'src/utils/nodeUtils.ts'
         }
       ];
@@ -1082,29 +1082,29 @@ export {}
       
       const methods = [
         {
-          className: 'DataService',
+          className: { name: 'DataService' },
           methodName: 'getItems',
           namespace: 'dataAPI',
-          parameters: [{ name: 'filter', type: 'Filter<Item>' }],
-          returnType: 'Promise<Array<Item>>',
+          parameters: [{ name: 'filter', type: { name: 'Filter<Item>' } }],
+          returnType: { name: 'Promise<Array<Item>>' },
           filePath: 'src/services/DataService.ts'
         },
         {
-          className: 'DataService',
+          className: { name: 'DataService' },
           methodName: 'getResults',
           namespace: 'dataAPI',
-          parameters: [{ name: 'query', type: 'string' }],
-          returnType: 'Promise<SearchResult<User | Product>>',
+          parameters: [{ name: 'query', type: { name: 'string' } }],
+          returnType: { name: 'Promise<SearchResult<User | Product>>' },
           filePath: 'src/services/DataService.ts'
         },
         {
           methodName: 'mapData',
           namespace: 'utilsAPI',
           parameters: [
-            { name: 'data', type: 'Record<string, DataEntry>' },
-            { name: 'mapper', type: 'Mapper<DataEntry, ResultType>' }
+            { name: 'data', type: { name: 'Record<string, DataEntry>' } },
+            { name: 'mapper', type: { name: 'Mapper<DataEntry, ResultType>' } }
           ],
-          returnType: 'Promise<ResultType[]>',
+          returnType: { name: 'Promise<ResultType[]>' },
           filePath: 'src/utils/dataMapper.ts'
         }
       ];
@@ -1139,26 +1139,26 @@ export {}
       
       const methods = [
         {
-          className: 'BuiltinService',
+          className: { name: 'BuiltinService' },
           methodName: 'processDate',
           namespace: 'builtinAPI',
-          parameters: [{ name: 'date', type: 'Date' }],
-          returnType: 'Promise<string>',
+          parameters: [{ name: 'date', type: { name: 'Date' } }],
+          returnType: { name: 'Promise<string>' },
           filePath: 'src/services/BuiltinService.ts'
         },
         {
-          className: 'BuiltinService',
+          className: { name: 'BuiltinService' },
           methodName: 'processArray',
           namespace: 'builtinAPI',
-          parameters: [{ name: 'items', type: 'Array<string>' }],
-          returnType: 'Promise<number>',
+          parameters: [{ name: 'items', type: { name: 'Array<string>' } }],
+          returnType: { name: 'Promise<number>' },
           filePath: 'src/services/BuiltinService.ts'
         },
         {
           methodName: 'processMap',
           namespace: 'builtinAPI',
-          parameters: [{ name: 'data', type: 'Map<string, number>' }],
-          returnType: 'Promise<Record<string, boolean>>',
+          parameters: [{ name: 'data', type: { name: 'Map<string, number>' } }],
+          returnType: { name: 'Promise<Record<string, boolean>>' },
           filePath: 'src/utils/builtinUtils.ts'
         }
       ];
@@ -1198,22 +1198,22 @@ export {}
       
       const methods = [
         {
-          className: 'MixedService',
+          className: { name: 'MixedService' },
           methodName: 'processUserData',
           namespace: 'mixedAPI',
           parameters: [
-            { name: 'user', type: 'User' },
-            { name: 'timestamp', type: 'Date' },
-            { name: 'metadata', type: 'Record<string, UserMetadata>' }
+            { name: 'user', type: { name: 'User' } },
+            { name: 'timestamp', type: { name: 'Date' } },
+            { name: 'metadata', type: { name: 'Record<string, UserMetadata>' } }
           ],
-          returnType: 'Promise<ProcessedUser>',
+          returnType: { name: 'Promise<ProcessedUser>' },
           filePath: 'src/services/MixedService.ts'
         },
         {
           methodName: 'validateConfig',
           namespace: 'mixedAPI',
-          parameters: [{ name: 'config', type: 'AppConfig | string' }],
-          returnType: 'Promise<ValidationResult>',
+          parameters: [{ name: 'config', type: { name: 'AppConfig | string' } }],
+          returnType: { name: 'Promise<ValidationResult>' },
           filePath: 'src/utils/configValidator.ts'
         }
       ];
@@ -1254,29 +1254,29 @@ export {}
       
       const methods = [
         {
-          className: 'UserService',
+          className: { name: 'UserService' },
           methodName: 'createUser',
           namespace: 'userAPI',
-          parameters: [{ name: 'userData', type: 'UserCreateRequest' }],
-          returnType: 'Promise<User>',
+          parameters: [{ name: 'userData', type: { name: 'UserCreateRequest' } }],
+          returnType: { name: 'Promise<User>' },
           filePath: 'src/services/UserService.ts'
         },
         {
-          className: 'ProductService',
+          className: { name: 'ProductService' },
           methodName: 'findProduct',
           namespace: 'productAPI',
-          parameters: [{ name: 'criteria', type: 'ProductSearchCriteria' }],
-          returnType: 'Promise<Product[]>',
+          parameters: [{ name: 'criteria', type: { name: 'ProductSearchCriteria' } }],
+          returnType: { name: 'Promise<Product[]>' },
           filePath: 'src/services/ProductService.ts'
         },
         {
           methodName: 'processOrder',
           namespace: 'orderAPI',
           parameters: [
-            { name: 'order', type: 'OrderRequest' },
-            { name: 'payment', type: 'PaymentInfo' }
+            { name: 'order', type: { name: 'OrderRequest' } },
+            { name: 'payment', type: { name: 'PaymentInfo' } }
           ],
-          returnType: 'Promise<OrderResult>',
+          returnType: { name: 'Promise<OrderResult>' },
           filePath: 'src/processors/orderProcessor.ts'
         }
       ];
