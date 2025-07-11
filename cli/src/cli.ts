@@ -58,7 +58,7 @@ program
         try {
           await fs.access(file); // Check file existence
           const content = await fs.readFile(file, 'utf8');
-          const methods = generator.analyzeFile(file, content);
+          const methods = await generator.analyzeFile(file, content);
           return methods;
         } catch (error) {
           logger.error(`Error analyzing ${file}: ${error instanceof Error ? error.message : error}`);
@@ -70,7 +70,7 @@ program
       const allMethods = methodArrays.flat();
 
       // Generate bridge files
-      generator.generateFiles(allMethods);
+      await generator.generateFiles(allMethods);
 
     } catch (error) {
       logger.error(`Error: ${error instanceof Error ? error.message : error}`);

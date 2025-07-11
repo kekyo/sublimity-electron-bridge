@@ -100,10 +100,10 @@ export interface ElectronBridgeGenerator {
    * @param code - The code of the file to analyze
    * @returns The exposed methods
    */
-  readonly analyzeFile: (filePath: string, code: string) => ExposedMethod[];
+  readonly analyzeFile: (filePath: string, code: string) => Promise<ExposedMethod[]>;
   /**
    * Generate the files for the exposed methods
    * @param methods - The exposed methods
    */
-  readonly generateFiles: (methods: ExposedMethod[]) => void;
+  readonly generateFiles: (methods: ExposedMethod[]) => Promise<void>;
 }

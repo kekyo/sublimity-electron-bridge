@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-cli",
-  "version": "0.15.1",
+  "version": "0.15.4",
   "description": "Electron bridge generator for automatic IPC setup",
   "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
   "license": "MIT",

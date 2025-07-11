@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 import { resolve, dirname, relative } from 'path';
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
+import { promises as fs } from 'fs';
 import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
 import { createConsoleLogger } from '.';
@@ -44,11 +44,11 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
  * @returns The generated code
  * @remarks This function generates the main handlers for the exposed methods.
  */
-const generateMainHandlers = (
+const generateMainHandlers = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   baseDir: string | undefined,
   outputDir: string,
-  channelPrefix: string): string => {
+  channelPrefix: string): Promise<string> => {
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
@@ -141,15 +141,15 @@ const generateMainHandlers = (
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
-const generatePreloadBridge = (
+const generatePreloadBridge = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   channelPrefix: string,
   baseDir: string | undefined,
-  outputDir: string): string => {
+  outputDir: string): Promise<string> => {
   const bridges: string[] = [];
   
   // Generate type imports for preload
-  const typeImports = generateTypeImports(namespaceGroups, baseDir, outputDir);
+  const typeImports = await generateTypeImports(namespaceGroups, baseDir, outputDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
@@ -182,19 +182,19 @@ const generatePreloadBridge = (
   return result.join('\n');
 };
 
-const primitiveTypes = [
+const primitiveTypes = new Set([
   'string', 'number', 'boolean', 'void', 'any', 'unknown', 'never',
   'undefined', 'null', 'object', 'bigint', 'symbol',
   // Built-in JavaScript types
   'Date', 'RegExp', 'Error', 'Array', 'Object', 'Function', 'Map', 'Set', 'WeakMap', 'WeakSet',
-  'Promise', 'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
+  'Promise', 'AsyncGenerator', 'Generator', 'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
   'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array',
   'BigInt64Array', 'BigUint64Array',
   // TypeScript utility types
   'Record', 'Partial', 'Required', 'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable',
   'ReturnType', 'InstanceType', 'ThisParameterType', 'OmitThisParameter', 'ThisType'
-];
-  
+]);
+
 /**
  * Check if a type is a primitive type that doesn't need import
  * @param type - The type to check
@@ -223,7 +223,7 @@ const isPrimitiveType = (type: string): boolean => {
   const cleanType = type.replace(/\[.*?\]/g, '').replace(/<.*?>/g, '').trim();
   
   // Check if it's a primitive type
-  if (primitiveTypes.includes(cleanType)) {
+  if (primitiveTypes.has(cleanType)) {
     return true;
   }
   
@@ -299,10 +299,10 @@ const extractCustomTypes = (type: string): string[] => {
  * @param outputDir - The output directory for type definitions
  * @returns The import statements
  */
-const generateTypeImports = (
+const generateTypeImports = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   baseDir: string | undefined,
-  outputDir: string): string[] => {
+  outputDir: string): Promise<string[]> => {
   const imports = new Set<string>();
   const typeToFilePath = new Map<string, string>();
   
@@ -365,15 +365,15 @@ const generateTypeImports = (
  * @returns The generated code
  * @remarks This function generates the type definitions for the exposed methods.
  */
-const generateTypeDefinitions = (
+const generateTypeDefinitions = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   baseDir: string | undefined,
-  outputDir: string): string => {
+  outputDir: string): Promise<string> => {
   const interfaces: string[] = [];
   const windowProperties: string[] = [];
   
   // Generate type imports
-  const typeImports = generateTypeImports(namespaceGroups, baseDir, outputDir);
+  const typeImports = await generateTypeImports(namespaceGroups, baseDir, outputDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const typeName = toPascalCase(namespace);
@@ -415,28 +415,28 @@ const generateTypeDefinitions = (
  * @param dirPath - The path to the directory
  * @remarks This function ensures a directory exists.
  */
-const ensureDirectoryExists = (dirPath: string): void => {
-  if (!existsSync(dirPath)) {
-    mkdirSync(dirPath, { recursive: true });
+const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
+  try {
+    await fs.access(dirPath);
+  } catch {
+    await fs.mkdir(dirPath, { recursive: true });
   }
 };
 
-const safeWriteFileSync = (filePath: string, content: string) => {
-  if (existsSync(filePath)) {
-    try {
-      const existingContent = readFileSync(filePath, 'utf8');
-      if (existingContent === content) {
-        return false;
-      }
-    } catch (error) {
-      // If we can't read the file, proceed with writing
+const safeWriteFile = async (filePath: string, content: string): Promise<boolean> => {
+  try {
+    const existingContent = await fs.readFile(filePath, 'utf8');
+    if (existingContent === content) {
+      return false;
     }
+  } catch (error) {
+    // If we can't read the file, proceed with writing
   }
 
   const dir = dirname(filePath);
 
-  ensureDirectoryExists(dir);
-  writeFileSync(filePath, content, 'utf8');
+  await ensureDirectoryExists(dir);
+  await fs.writeFile(filePath, content, 'utf8');
 
   return true;
 };
@@ -497,7 +497,7 @@ export const createElectronBridgeGenerator =
    * @param code - The code of the file to analyze
    * @returns The exposed methods
    */
-  const analyzeFile = (filePath: string, code: string): ExposedMethod[] => {
+  const analyzeFile = async (filePath: string, code: string): Promise<ExposedMethod[]> => {
     // Skip generated files to avoid analysis loops
     if (isGeneratedFile(
       filePath,
@@ -514,14 +514,14 @@ export const createElectronBridgeGenerator =
       true
     );
 
-    return extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace);
+    return await extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace);
   };
 
   /**
    * Generate the files for the exposed methods
    * @param methods - The exposed methods
    */
-  const generateFiles = (methods: ExposedMethod[]): void => {
+  const generateFiles = async (methods: ExposedMethod[]): Promise<void> => {
     // Sort methods by namespace to ensure deterministic order
     const namespaceGroups = groupMethodsByNamespace(methods);
 
@@ -533,33 +533,33 @@ export const createElectronBridgeGenerator =
     // Generate main handlers
     const mainFilePath = resolveOutputPath(
       _options.mainProcessHandlerFile);
-    const mainHandlersCode = generateMainHandlers(
+    const mainHandlersCode = await generateMainHandlers(
       namespaceGroups, _options.baseDir, dirname(mainFilePath), _options.channelPrefix);
-    const wroteMainHandlers = safeWriteFileSync(
+    const wroteMainHandlers = await safeWriteFile(
       mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
     const preloadFilePath = resolveOutputPath(
       _options.preloadHandlerFile);
-    const preloadBridgeCode = generatePreloadBridge(
+    const preloadBridgeCode = await generatePreloadBridge(
       namespaceGroups, _options.channelPrefix, _options.baseDir, dirname(preloadFilePath));
-    const wrotePreloadHandlers = safeWriteFileSync(
+    const wrotePreloadHandlers = await safeWriteFile(
       preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
     const typeDefsFilePath = resolveOutputPath(
       _options.typeDefinitionsFile!);
-    const typeDefsCode = generateTypeDefinitions(
+    const typeDefsCode = await generateTypeDefinitions(
       namespaceGroups, _options.baseDir, dirname(typeDefsFilePath));
-    const wroteTypeDefs = safeWriteFileSync(
+    const wroteTypeDefs = await safeWriteFile(
       typeDefsFilePath, typeDefsCode);
 
     if (wroteMainHandlers || wrotePreloadHandlers || wroteTypeDefs) {
       _options.logger.info(`Generated files:`);
       if (wroteMainHandlers) _options.logger.info(`  - ${mainFilePath}`);
       if (wrotePreloadHandlers) _options.logger.info(`  - ${preloadFilePath}`);
-      if (typeDefsFilePath) _options.logger.info(`  - ${typeDefsFilePath}`);
-      _options.logger.info(`  - Found ${methods.length} exposed methods in ${Object.keys(namespaceGroups).length} namespaces`);
+      if (wroteTypeDefs) _options.logger.info(`  - ${typeDefsFilePath}`);
+      _options.logger.info(`  - Found ${methods.length} exposed methods in ${namespaceGroups.size} namespaces`);
     } else {
       _options.logger.info(`Could not found any expose methods`);
     }

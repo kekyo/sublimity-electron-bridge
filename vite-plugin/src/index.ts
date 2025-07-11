@@ -94,7 +94,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
     try {
       await fs.access(filePath); // Check file existence
       const code = await fs.readFile(filePath, 'utf-8');
-      const methods = generator.analyzeFile(filePath, code);
+      const methods = await generator.analyzeFile(filePath, code);
       return methods;
     } catch (error) {
       logger.warn(`Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
@@ -106,7 +106,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
   const allMethods = methodArrays.flat();
   
   // Generate files once
-  generator.generateFiles(allMethods);
+  await generator.generateFiles(allMethods);
 };
 
 const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {

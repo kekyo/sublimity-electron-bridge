@@ -56,7 +56,7 @@ describe('ElectronBridgeCore', () => {
   });
 
   describe('Method Extraction', () => {
-    it('should extract methods with @decorator expose JSDoc tag from classes', () => {
+    it('should extract methods with @decorator expose JSDoc tag from classes', async () => {
       const sourceCode = `
         export class FileService {
           /**
@@ -86,7 +86,7 @@ describe('ElectronBridgeCore', () => {
       );
       const logger = createConsoleLogger();
       
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
       
@@ -110,7 +110,7 @@ describe('ElectronBridgeCore', () => {
       });
     });
 
-    it('should extract standalone functions with @decorator expose JSDoc tag', () => {
+    it('should extract standalone functions with @decorator expose JSDoc tag', async () => {
       const sourceCode = `
         /**
          * @decorator expose databaseAPI
@@ -138,7 +138,7 @@ describe('ElectronBridgeCore', () => {
       );
       const logger = createConsoleLogger();
 
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
       
@@ -157,7 +157,7 @@ describe('ElectronBridgeCore', () => {
       });
     });
 
-    it('should handle mixed class methods and standalone functions', () => {
+    it('should handle mixed class methods and standalone functions', async () => {
       const sourceCode = `
         export class UserService {
           /**
@@ -184,14 +184,14 @@ describe('ElectronBridgeCore', () => {
       );
       const logger = createConsoleLogger();
 
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
       expect(methods[0].className).toBe('UserService');
       expect(methods[1].className).toBeUndefined();
     })
 
-    it('should extract arrow functions with variable binding', () => {
+    it('should extract arrow functions with variable binding', async () => {
       const sourceCode = `
         /**
          * @decorator expose utilsAPI
@@ -216,7 +216,7 @@ describe('ElectronBridgeCore', () => {
       );
       const logger = createConsoleLogger();
 
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(2);
       
@@ -237,7 +237,7 @@ describe('ElectronBridgeCore', () => {
   });
 
   describe('Validation', () => {
-    it('should validate camelCase namespace arguments', () => {
+    it('should validate camelCase namespace arguments', async () => {
       const sourceCode = `
         export class TestService {
           /**
@@ -263,13 +263,13 @@ describe('ElectronBridgeCore', () => {
         error: () => {}
       };
 
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
       expect(warnings[0]).toMatch(/Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
     });
 
-    it('should validate Promise return types', () => {
+    it('should validate Promise return types', async () => {
       const sourceCode = `
         export class TestService {
           /**
@@ -295,7 +295,7 @@ describe('ElectronBridgeCore', () => {
         error: () => {}
       };
       
-      const methods = extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
+      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
       
       expect(methods).toHaveLength(0);
       expect(warnings[0]).toMatch(/Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
@@ -303,7 +303,7 @@ describe('ElectronBridgeCore', () => {
   });
 
   describe('Custom Default Namespace', () => {
-    it('should use custom default namespace when specified', () => {
+    it('should use custom default namespace when specified', async () => {
       const sourceCode = `
         export class TestService {
           /**
@@ -329,7 +329,7 @@ describe('ElectronBridgeCore', () => {
         true
       );
       
-      const methods = extractExposedMethods(createConsoleLogger(), sourceFile, 'test.ts', 'customAPI');
+      const methods = await extractExposedMethods(createConsoleLogger(), sourceFile, 'test.ts', 'customAPI');
       
       expect(methods).toHaveLength(2);
       
@@ -350,7 +350,7 @@ describe('ElectronBridgeCore', () => {
   });
 
   describe('analyzeFile', () => {
-    it('should analyze TypeScript code and return exposed methods', () => {
+    it('should analyze TypeScript code and return exposed methods', async () => {
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: join(testOutputDir, 'analyze-main', 'ipc-handlers.ts'),
         preloadHandlerFile: join(testOutputDir, 'analyze-preload', 'bridge.ts'),
@@ -368,7 +368,7 @@ describe('ElectronBridgeCore', () => {
         }
       `;
       
-      const methods = generator.analyzeFile('src/services/FileService.ts', sourceCode);
+      const methods = await generator.analyzeFile('src/services/FileService.ts', sourceCode);
       
       expect(methods).toHaveLength(1);
       expect(methods[0]).toMatchObject({
@@ -379,7 +379,7 @@ describe('ElectronBridgeCore', () => {
       });
     });
 
-    it('should skip generated files to avoid analysis loops', () => {
+    it('should skip generated files to avoid analysis loops', async () => {
       const tempMainFile = join(testOutputDir, 'temp-main', 'ipc-handlers.ts');
       const tempPreloadFile = join(testOutputDir, 'temp-preload', 'bridge.ts');
       const tempTypeFile = join(testOutputDir, 'temp-types.d.ts');
@@ -402,15 +402,15 @@ describe('ElectronBridgeCore', () => {
       `;
       
       // Should skip files in output directories
-      expect(generator.analyzeFile(tempMainFile, sourceCode)).toHaveLength(0);
-      expect(generator.analyzeFile(tempPreloadFile, sourceCode)).toHaveLength(0);
-      expect(generator.analyzeFile(tempTypeFile, sourceCode)).toHaveLength(0);
+      expect(await generator.analyzeFile(tempMainFile, sourceCode)).toHaveLength(0);
+      expect(await generator.analyzeFile(tempPreloadFile, sourceCode)).toHaveLength(0);
+      expect(await generator.analyzeFile(tempTypeFile, sourceCode)).toHaveLength(0);
       
       // Should analyze files not in output directories
-      expect(generator.analyzeFile('src/services/FileService.ts', sourceCode)).toHaveLength(1);
+      expect(await generator.analyzeFile('src/services/FileService.ts', sourceCode)).toHaveLength(1);
     });
 
-    it('should handle different file paths correctly', () => {
+    it('should handle different file paths correctly', async () => {
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: join(testOutputDir, 'paths-main', 'ipc-handlers.ts'),
         preloadHandlerFile: join(testOutputDir, 'paths-preload', 'bridge.ts'),
@@ -426,16 +426,16 @@ describe('ElectronBridgeCore', () => {
         }
       `;
       
-      const methods1 = generator.analyzeFile('/absolute/path/utils.ts', sourceCode);
-      const methods2 = generator.analyzeFile('relative/path/utils.ts', sourceCode);
-      const methods3 = generator.analyzeFile('utils.ts', sourceCode);
+      const methods1 = await generator.analyzeFile('/absolute/path/utils.ts', sourceCode);
+      const methods2 = await generator.analyzeFile('relative/path/utils.ts', sourceCode);
+      const methods3 = await generator.analyzeFile('utils.ts', sourceCode);
       
       expect(methods1[0].filePath).toBe('/absolute/path/utils.ts');
       expect(methods2[0].filePath).toBe('relative/path/utils.ts');
       expect(methods3[0].filePath).toBe('utils.ts');
     });
 
-    it('should handle malformed TypeScript code gracefully', () => {
+    it('should handle malformed TypeScript code gracefully', async () => {
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: join(testOutputDir, 'malformed-main', 'ipc-handlers.ts'),
         preloadHandlerFile: join(testOutputDir, 'malformed-preload', 'bridge.ts'),
@@ -453,8 +453,8 @@ describe('ElectronBridgeCore', () => {
           // Missing closing brace
       `;
       
-      expect(() => {
-        const methods = generator.analyzeFile('test.ts', sourceCode);
+      expect(async () => {
+        const methods = await generator.analyzeFile('test.ts', sourceCode);
         // Should return empty array or whatever TypeScript parser can handle
         expect(Array.isArray(methods)).toBe(true);
       }).not.toThrow();
@@ -469,7 +469,7 @@ describe('ElectronBridgeCore', () => {
       }
     });
 
-    it('should generate all three output files', () => {
+    it('should generate all three output files', async () => {
       const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'types', 'electron-api.d.ts');
@@ -491,7 +491,7 @@ describe('ElectronBridgeCore', () => {
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       // Check that all files are created
       expect(existsSync(mainFile)).toBe(true);
@@ -499,7 +499,7 @@ describe('ElectronBridgeCore', () => {
       expect(existsSync(typeDefFile)).toBe(true);
     });
 
-    it('should generate correct main handlers content', () => {
+    it('should generate correct main handlers content', async () => {
       const mainFile = join(testOutputDir, 'main-handlers', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-handlers', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'main-handlers-types.d.ts');
@@ -529,7 +529,7 @@ describe('ElectronBridgeCore', () => {
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -551,7 +551,7 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
       expect(mainContent).toBe(expectedMainContent);
     });
 
-    it('should generate correct preload bridge content', () => {
+    it('should generate correct preload bridge content', async () => {
       const mainFile = join(testOutputDir, 'main-bridge', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-bridge', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'preload-bridge-types.d.ts');
@@ -580,7 +580,7 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
@@ -600,7 +600,7 @@ contextBridge.exposeInMainWorld('systemAPI', {
       expect(preloadContent).toBe(expectedPreloadContent);
     });
 
-    it('should generate correct type definitions content', () => {
+    it('should generate correct type definitions content', async () => {
       const mainFile = join(testOutputDir, 'main-types', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-types', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'electron-api.d.ts');
@@ -632,7 +632,7 @@ contextBridge.exposeInMainWorld('systemAPI', {
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -656,7 +656,7 @@ export {}
       expect(typeContent).toBe(expectedTypeContent);
     });
 
-    it('should handle relative paths when baseDir is specified', () => {
+    it('should handle relative paths when baseDir is specified', async () => {
       const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'relative-types.d.ts');
@@ -680,7 +680,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -689,7 +689,7 @@ export {}
       expect(mainContent).not.toContain(resolve(baseDir, 'src/services/FileService'));
     });
 
-    it('should handle empty methods array', () => {
+    it('should handle empty methods array', async () => {
       const mainFile = join(testOutputDir, 'empty-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'empty-types.d.ts');
@@ -701,7 +701,7 @@ export {}
       });
       
       // Should not create files when no methods provided
-      expect(() => generator.generateFiles([])).not.toThrow();
+      await expect(generator.generateFiles([])).resolves.not.toThrow();
 
       const mainContent = readFileSync(mainFile, 'utf8');
       expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
@@ -736,7 +736,7 @@ export {}
 `);
     });
 
-    it('should handle multiple namespaces correctly', () => {
+    it('should handle multiple namespaces correctly', async () => {
       const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'multi-types.d.ts');
@@ -773,7 +773,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
@@ -783,7 +783,7 @@ export {}
       expect(preloadContent).toContain("contextBridge.exposeInMainWorld('dbAPI'");
     });
 
-    it('should deduplicate identical class imports', () => {
+    it('should deduplicate identical class imports', async () => {
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'dedupe-types.d.ts');
@@ -813,7 +813,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -826,7 +826,7 @@ export {}
       expect(instanceMatches).toHaveLength(1);
     });
 
-    it('should generate files with complex namespace combinations', () => {
+    it('should generate files with complex namespace combinations', async () => {
       const mainFile = join(testOutputDir, 'complex-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'complex-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'complex-types.d.ts');
@@ -871,7 +871,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       // Test main handlers
       const mainContent = readFileSync(mainFile, 'utf8');
@@ -948,7 +948,7 @@ export {}
   });
 
   describe('Type Import Generation', () => {
-    it('should generate import statements for custom types in parameters and return values', () => {
+    it('should generate import statements for custom types in parameters and return values', async () => {
       const mainFile = join(testOutputDir, 'import-test-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'import-test-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'import-test-types.d.ts');
@@ -989,7 +989,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1009,7 +1009,7 @@ export {}
       expect(typeContent).toContain('orderAPI: OrderAPI;');
     });
 
-    it('should generate import statements for external package types', () => {
+    it('should generate import statements for external package types', async () => {
       const mainFile = join(testOutputDir, 'external-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'external-import-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'external-import-types.d.ts');
@@ -1050,7 +1050,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1068,7 +1068,7 @@ export {}
       expect(typeContent).toContain('tsAPI: TsAPI;');
     });
 
-    it('should handle complex generic types with custom types', () => {
+    it('should handle complex generic types with custom types', async () => {
       const mainFile = join(testOutputDir, 'generic-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'generic-import-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'generic-import-types.d.ts');
@@ -1109,7 +1109,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1125,7 +1125,7 @@ export {}
       expect(typeContent).toContain('mapData(data: Record<string, DataEntry>, mapper: Mapper<DataEntry, ResultType>): Promise<ResultType[]>;');
     });
 
-    it('should not generate import statements for built-in types', () => {
+    it('should not generate import statements for built-in types', async () => {
       const mainFile = join(testOutputDir, 'builtin-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'builtin-import-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'builtin-import-types.d.ts');
@@ -1163,7 +1163,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1184,7 +1184,7 @@ export {}
       expect(typeContent).toContain('builtinAPI: BuiltinAPI;');
     });
 
-    it('should handle mixed custom and built-in types correctly', () => {
+    it('should handle mixed custom and built-in types correctly', async () => {
       const mainFile = join(testOutputDir, 'mixed-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'mixed-import-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'mixed-import-types.d.ts');
@@ -1218,7 +1218,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1240,7 +1240,7 @@ export {}
       expect(typeContent).toContain('mixedAPI: MixedAPI;');
     });
 
-    it('should generate import statements for types from separate definition files', () => {
+    it('should generate import statements for types from separate definition files', async () => {
       const mainFile = join(testOutputDir, 'separate-types-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'separate-types-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'separate-types.d.ts');
@@ -1281,7 +1281,7 @@ export {}
         }
       ];
       
-      generator.generateFiles(methods);
+      await generator.generateFiles(methods);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       const preloadContent = readFileSync(preloadFile, 'utf8');

@@ -85,8 +85,8 @@ const isPromiseType = (typeNode: ts.TypeNode): boolean => {
  * @param defaultNamespace - The default namespace for the exposed methods
  * @returns The exposed methods
  */
-export const extractExposedMethods = (
-  logger: Logger, sourceFile: ts.SourceFile, filePath: string, defaultNamespace: string): ExposedMethod[] => {
+export const extractExposedMethods = async (
+  logger: Logger, sourceFile: ts.SourceFile, filePath: string, defaultNamespace: string): Promise<ExposedMethod[]> => {
   const methods: ExposedMethod[] = [];
   
   const visit = (node: ts.Node) => {
@@ -139,17 +139,17 @@ export const extractExposedMethods = (
             sourceFile.text.substring(param.type.pos, param.type.end).trim() :
             'any'
         }));
-        
+
         const returnType = node.type ?
           sourceFile.text.substring(node.type.pos, node.type.end).trim() :
           'Promise<any>';
-        
+
         // Check if function returns Promise
         if (node.type && !isPromiseType(node.type)) {
           logger.warn(`Warning: @decorator expose function should return Promise: ${node.name.text} in ${filePath}:${ts.getLineAndCharacterOfPosition(sourceFile, node.pos).line + 1}`);
           return; // Skip this function
         }
-        
+
         methods.push({
           methodName: node.name.text,
           namespace: exposedMethod.namespace,
