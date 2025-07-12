@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import { resolve, dirname, relative } from 'path';
 import { promises as fs } from 'fs';
-import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
+import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod, TypeInfo, SimpleTypeInfo, ArrayTypeInfo, GenericTypeInfo } from './types';
 import { extractExposedMethods, toPascalCase } from './visitor';
 import { createConsoleLogger } from '.';
 
@@ -153,7 +153,7 @@ const generatePreloadBridge = async (
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type.name}`).join(', ');
+      const params = method.parameters.map(p => `${p.name}: ${typeInfoToString(p.type)}`).join(', ');
       const args = method.parameters.map(p => p.name).join(', ');
       const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
       
@@ -231,7 +231,74 @@ const isPrimitiveType = (type: string): boolean => {
 };
 
 /**
- * Extract custom types from a type string
+ * Convert TypeInfo to type string representation
+ * @param typeInfo - The TypeInfo to convert
+ * @returns Type string representation
+ */
+const typeInfoToString = (typeInfo: TypeInfo): string => {
+  switch (typeInfo.kind) {
+    case 'simple':
+      return typeInfo.name;
+      
+    case 'array':
+      const arrayTypeInfo = typeInfo as ArrayTypeInfo;
+      return `${typeInfoToString(arrayTypeInfo.elementType)}[]`;
+      
+    case 'generic':
+      const genericTypeInfo = typeInfo as GenericTypeInfo;
+      const typeArgs = genericTypeInfo.typeArguments.map(arg => typeInfoToString(arg)).join(', ');
+      return `${genericTypeInfo.name}<${typeArgs}>`;
+      
+    case 'other':
+      return typeInfo.name;
+  }
+};
+
+/**
+ * Extract custom types from TypeInfo structure
+ * @param typeInfo - The TypeInfo to analyze
+ * @returns Array of objects with custom type names and their file paths
+ */
+const extractCustomTypesFromTypeInfo = (typeInfo: TypeInfo): Array<{ name: string; filePath?: string }> => {
+  const customTypes: Array<{ name: string; filePath?: string }> = [];
+  
+  switch (typeInfo.kind) {
+    case 'simple':
+      // Add the type if it's not primitive
+      if (!isPrimitiveType(typeInfo.name)) {
+        customTypes.push({ name: typeInfo.name, filePath: typeInfo.filePath });
+      }
+      break;
+      
+    case 'array':
+      // Recursively extract from element type
+      const arrayTypeInfo = typeInfo as ArrayTypeInfo;
+      customTypes.push(...extractCustomTypesFromTypeInfo(arrayTypeInfo.elementType));
+      break;
+      
+    case 'generic':
+      // Add the generic type itself if it's not primitive
+      const genericTypeInfo = typeInfo as GenericTypeInfo;
+      if (!isPrimitiveType(genericTypeInfo.name)) {
+        customTypes.push({ name: genericTypeInfo.name, filePath: genericTypeInfo.filePath });
+      }
+      
+      // Recursively extract from type arguments
+      genericTypeInfo.typeArguments.forEach(arg => {
+        customTypes.push(...extractCustomTypesFromTypeInfo(arg));
+      });
+      break;
+      
+    case 'other':
+      // For other types, we can't extract specific information
+      break;
+  }
+  
+  return customTypes;
+};
+
+/**
+ * Extract custom types from a type string (fallback for old format)
  * @param type - The type string to analyze
  * @returns Array of custom type names
  */
@@ -309,18 +376,24 @@ const generateTypeImports = async (
   // Collect all custom types and their file paths
   for (const methods of namespaceGroups.values()) {
     for (const method of methods) {
-      // Extract types from parameters
+      // Extract types from parameters using new TypeInfo structure
       method.parameters.forEach(param => {
-        const customTypes = extractCustomTypes(param.type.name);
-        customTypes.forEach(type => {
-          typeToFilePath.set(type, method.filePath);
+        const customTypes = extractCustomTypesFromTypeInfo(param.type);
+        customTypes.forEach(({ name, filePath }) => {
+          const resolvedFilePath = filePath || method.filePath;
+          if (resolvedFilePath) {
+            typeToFilePath.set(name, resolvedFilePath);
+          }
         });
       });
       
-      // Extract types from return type
-      const returnTypes = extractCustomTypes(method.returnType.name);
-      returnTypes.forEach(type => {
-        typeToFilePath.set(type, method.filePath);
+      // Extract types from return type using new TypeInfo structure
+      const returnTypes = extractCustomTypesFromTypeInfo(method.returnType);
+      returnTypes.forEach(({ name, filePath }) => {
+        const resolvedFilePath = filePath || method.filePath;
+        if (resolvedFilePath) {
+          typeToFilePath.set(name, resolvedFilePath);
+        }
       });
     }
   }
@@ -379,8 +452,8 @@ const generateTypeDefinitions = async (
     const typeName = toPascalCase(namespace);
 
     const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type.name}`).join(', ');
-      return `  ${method.methodName}(${params}): ${method.returnType.name};`;
+      const params = method.parameters.map(p => `${p.name}: ${typeInfoToString(p.type)}`).join(', ');
+      return `  ${method.methodName}(${params}): ${typeInfoToString(method.returnType)};`;
     }).join('\n');
     
     interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);

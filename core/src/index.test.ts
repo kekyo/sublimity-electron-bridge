@@ -94,20 +94,38 @@ describe('ElectronBridgeCore', () => {
         declaredType: { name: 'FileService' },
         methodName: 'readFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: { name: 'string' } }],
-        returnType: { name: 'Promise<string>' }
+        parameters: [{ name: 'path', type: { name: 'string', kind: 'simple' } }]
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType = methods[0].returnType;
+      expect(returnType.kind).toBe('generic');
+      expect(returnType.name).toBe('Promise');
+      if (returnType.kind === 'generic') {
+        expect(returnType.typeArguments).toHaveLength(1);
+        expect(returnType.typeArguments[0].name).toBe('string');
+        expect(returnType.typeArguments[0].kind).toBe('simple');
+      }
       
       expect(methods[1]).toMatchObject({
         declaredType: { name: 'FileService' },
         methodName: 'writeFile',
         namespace: 'electronAPI', // default namespace
         parameters: [
-          { name: 'path', type: { name: 'string' } },
-          { name: 'content', type: { name: 'string' } }
-        ],
-        returnType: { name: 'Promise<void>' }
+          { name: 'path', type: { name: 'string', kind: 'simple' } },
+          { name: 'content', type: { name: 'string', kind: 'simple' } }
+        ]
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType2 = methods[1].returnType;
+      expect(returnType2.kind).toBe('generic');
+      expect(returnType2.name).toBe('Promise');
+      if (returnType2.kind === 'generic') {
+        expect(returnType2.typeArguments).toHaveLength(1);
+        expect(returnType2.typeArguments[0].name).toBe('void');
+        expect(returnType2.typeArguments[0].kind).toBe('simple');
+      }
     });
 
     it('should handle mixed class methods and standalone functions', async () => {
@@ -188,16 +206,34 @@ describe('ElectronBridgeCore', () => {
       expect(methods[0]).toMatchObject({
         methodName: 'queryDatabase',
         namespace: 'databaseAPI',
-        parameters: [{ name: 'sql', type: { name: 'string' } }],
-        returnType: { name: 'Promise<any[]>' }
+        parameters: [{ name: 'sql', type: { name: 'string', kind: 'simple' } }]
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType = methods[0].returnType;
+      expect(returnType.kind).toBe('generic');
+      expect(returnType.name).toBe('Promise');
+      if (returnType.kind === 'generic') {
+        expect(returnType.typeArguments).toHaveLength(1);
+        expect(returnType.typeArguments[0].name).toBe('any[]');
+        expect(returnType.typeArguments[0].kind).toBe('array');
+      }
       
       expect(methods[1]).toMatchObject({
         methodName: 'getVersion',
         namespace: 'electronAPI', // default namespace
-        parameters: [],
-        returnType: { name: 'Promise<string>' }
+        parameters: []
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType2 = methods[1].returnType;
+      expect(returnType2.kind).toBe('generic');
+      expect(returnType2.name).toBe('Promise');
+      if (returnType2.kind === 'generic') {
+        expect(returnType2.typeArguments).toHaveLength(1);
+        expect(returnType2.typeArguments[0].name).toBe('string');
+        expect(returnType2.typeArguments[0].kind).toBe('simple');
+      }
     });
 
     it('should extract arrow functions with variable binding', async () => {
@@ -232,16 +268,34 @@ describe('ElectronBridgeCore', () => {
       expect(methods[0]).toMatchObject({
         methodName: 'getSystemInfo',
         namespace: 'systemAPI',
-        parameters: [],
-        returnType: { name: 'Promise<object>' }
+        parameters: []
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType = methods[0].returnType;
+      expect(returnType.kind).toBe('generic');
+      expect(returnType.name).toBe('Promise');
+      if (returnType.kind === 'generic') {
+        expect(returnType.typeArguments).toHaveLength(1);
+        expect(returnType.typeArguments[0].name).toBe('object');
+        expect(returnType.typeArguments[0].kind).toBe('simple');
+      }
       
       expect(methods[1]).toMatchObject({
         methodName: 'getCurrentUser',
         namespace: 'mainProcess', // default namespace
-        parameters: [{ name: 'id', type: { name: 'number' } }],
-        returnType: { name: 'Promise<string>' }
+        parameters: [{ name: 'id', type: { name: 'number', kind: 'simple' } }]
       });
+      
+      // Check the new TypeInfo structure for return type
+      const returnType2 = methods[1].returnType;
+      expect(returnType2.kind).toBe('generic');
+      expect(returnType2.name).toBe('Promise');
+      if (returnType2.kind === 'generic') {
+        expect(returnType2.typeArguments).toHaveLength(1);
+        expect(returnType2.typeArguments[0].name).toBe('string');
+        expect(returnType2.typeArguments[0].kind).toBe('simple');
+      }
     });
   });
 

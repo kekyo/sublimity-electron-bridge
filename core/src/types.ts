@@ -62,9 +62,9 @@ export interface ElectronBridgeOptions {
 }
 
 /**
- * Type information interface
+ * Base type information interface
  */
-export interface TypeInfo {
+export interface BaseTypeInfo {
   /**
    * The name of the type
    */
@@ -74,6 +74,47 @@ export interface TypeInfo {
    */
   readonly filePath?: string;
 }
+
+/**
+ * Simple type node (primitives, interfaces, type aliases, etc.)
+ */
+export interface SimpleTypeInfo extends BaseTypeInfo {
+  readonly kind: 'simple';
+}
+
+/**
+ * Array type node
+ */
+export interface ArrayTypeInfo extends BaseTypeInfo {
+  readonly kind: 'array';
+  /**
+   * Element type of the array
+   */
+  readonly elementType: TypeInfo;
+}
+
+/**
+ * Generic type node with type arguments
+ */
+export interface GenericTypeInfo extends BaseTypeInfo {
+  readonly kind: 'generic';
+  /**
+   * Type arguments for the generic type
+   */
+  readonly typeArguments: TypeInfo[];
+}
+
+/**
+ * Other complex type node
+ */
+export interface OtherTypeInfo extends BaseTypeInfo {
+  readonly kind: 'other';
+}
+
+/**
+ * Union type for all type information
+ */
+export type TypeInfo = SimpleTypeInfo | ArrayTypeInfo | GenericTypeInfo | OtherTypeInfo;
 
 /**
  * Exposed method interface

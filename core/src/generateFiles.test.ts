@@ -3,6 +3,7 @@ import { createElectronBridgeGenerator } from './index';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import { SimpleTypeInfo, GenericTypeInfo } from './types';
 
 describe('generateFiles', () => {
   const testOutputDir = mkdtempSync(join(tmpdir(), 'cli-test-'));
@@ -113,18 +114,18 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
     
     const methods = [
       {
-        declaredType: { name: 'FileService' },
+        declaredType: { name: 'FileService', kind: 'simple' } as SimpleTypeInfo,
         methodName: 'readFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: { name: 'string' } }],
-        returnType: { name: 'Promise<string>' },
+        parameters: [{ name: 'path', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }],
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/services/FileService.ts'
       },
       {
         methodName: 'getVersion',
         namespace: 'systemAPI',
         parameters: [],
-        returnType: { name: 'Promise<string>' },
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/utils/version.ts'
       }
     ];
@@ -162,21 +163,21 @@ contextBridge.exposeInMainWorld('systemAPI', {
     
     const methods = [
       {
-        declaredType: { name: 'FileService' },
+        declaredType: { name: 'FileService', kind: 'simple' } as SimpleTypeInfo,
         methodName: 'readFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: { name: 'string' } }],
-        returnType: { name: 'Promise<string>' },
+        parameters: [{ name: 'path', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }],
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/services/FileService.ts'
       },
       {
         methodName: 'writeFile',
         namespace: 'fileAPI',
         parameters: [
-          { name: 'path', type: { name: 'string' } },
-          { name: 'content', type: { name: 'string' } }
+          { name: 'path', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo },
+          { name: 'content', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }
         ],
-        returnType: { name: 'Promise<void>' },
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'void', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/services/FileService.ts'
       }
     ];
@@ -389,33 +390,33 @@ export {}
     
     const methods = [
       {
-        declaredType: { name: 'FileService' },
+        declaredType: { name: 'FileService', kind: 'simple' } as SimpleTypeInfo,
         methodName: 'readFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: { name: 'string' } }],
-        returnType: { name: 'Promise<string>' },
+        parameters: [{ name: 'path', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }],
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/services/FileService.ts'
       },
       {
-        declaredType: { name: 'FileService' },
+        declaredType: { name: 'FileService', kind: 'simple' } as SimpleTypeInfo,
         methodName: 'writeFile',
         namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: { name: 'string' } }, { name: 'content', type: { name: 'string' } }],
-        returnType: { name: 'Promise<void>' },
+        parameters: [{ name: 'path', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }, { name: 'content', type: { name: 'string', kind: 'simple' } as SimpleTypeInfo }],
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'void', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/services/FileService.ts'
       },
       {
         methodName: 'getVersion',
         namespace: 'systemAPI',
         parameters: [],
-        returnType: { name: 'Promise<string>' },
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/utils/system.ts'
       },
       {
         methodName: 'formatDate',
         namespace: 'utilsAPI',
-        parameters: [{ name: 'date', type: { name: 'Date' } }],
-        returnType: { name: 'Promise<string>' },
+        parameters: [{ name: 'date', type: { name: 'Date', kind: 'simple' } as SimpleTypeInfo }],
+        returnType: { name: 'Promise', kind: 'generic', typeArguments: [{ name: 'string', kind: 'simple' } as SimpleTypeInfo] } as GenericTypeInfo,
         filePath: 'src/utils/format.ts'
       }
     ];
