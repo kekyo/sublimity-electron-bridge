@@ -95,12 +95,11 @@ export interface ExposedMethod {
  */
 export interface ElectronBridgeGenerator {
   /**
-   * Analyze a file and extract the exposed methods
-   * @param filePath - The path to the file to analyze
-   * @param code - The code of the file to analyze
+   * Analyze multiple files and extract exposed methods using the new extractor
+   * @param filePaths - Array of file paths to analyze
    * @returns The exposed methods
    */
-  readonly analyzeFile: (filePath: string, code: string) => Promise<ExposedMethod[]>;
+  readonly analyzeFiles: (filePaths: string[]) => Promise<ExposedMethod[]>;
   /**
    * Generate the files for the exposed methods
    * @param methods - The exposed methods

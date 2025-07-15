@@ -1,14 +1,13 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { readFileSync } from 'fs';
-
-// Read version from package.json
-const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
+import screwUp from 'screw-up';
 
 export default defineConfig({
-  define: {
-    __VERSION__: JSON.stringify(packageJson.version)
-  },
+  plugins: [
+    screwUp({
+      outputMetadataFile: true
+    })
+  ],
   build: {
     lib: {
       entry: {

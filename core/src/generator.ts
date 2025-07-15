@@ -2,8 +2,84 @@ import * as ts from 'typescript';
 import { resolve, dirname, relative } from 'path';
 import { promises as fs } from 'fs';
 import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
-import { extractExposedMethods, toPascalCase } from './visitor';
+/**
+ * Check if a string is camelCase
+ * @param str - The string to check
+ * @returns Whether the string is camelCase
+ */
+export const isCamelCase = (str: string): boolean => {
+  return /^[a-z][a-zA-Z0-9]*$/.test(str);
+};
+
+/**
+ * Convert a string to PascalCase
+ * @param str - The string to convert
+ * @returns The PascalCase string
+ */
+export const toPascalCase = (str: string): string => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+import { extractFunctionMethods, FunctionMethodInfo } from './extractor';
 import { createConsoleLogger } from '.';
+
+/**
+ * Convert FunctionMethodInfo to ExposedMethod
+ * @param functionInfo - The function method info from extractor
+ * @param defaultNamespace - The default namespace to use
+ * @returns ExposedMethod or undefined if not an exposed method
+ */
+const convertToExposedMethod = (functionInfo: FunctionMethodInfo, defaultNamespace: string): ExposedMethod | undefined => {
+  // Check if this function has an 'expose' decorator
+  if (!functionInfo.decoratorInfo || functionInfo.decoratorInfo.decorator !== 'expose') {
+    return undefined;
+  }
+  
+  // Parse the namespace from the decorator argument
+  const argument = functionInfo.decoratorInfo.argument;
+  let namespace = defaultNamespace;
+  
+  if (argument) {
+    // For now, treat the entire argument as the namespace
+    // In the future, this could be enhanced to parse more complex arguments
+    namespace = argument.trim();
+  }
+  
+  // Convert parameters to ExposedMethod format
+  const parameters = functionInfo.parameters.map(param => ({
+    name: param.name,
+    type: param.type.typeString
+  }));
+  
+  return {
+    className: functionInfo.className,
+    methodName: functionInfo.name,
+    namespace,
+    parameters,
+    returnType: functionInfo.returnType.typeString,
+    filePath: functionInfo.filePath
+  };
+};
+
+/**
+ * Extract exposed methods using the new extractor
+ * @param tsConfigPath - Path to tsconfig.json
+ * @param sourceFilePaths - Array of source file paths
+ * @param defaultNamespace - Default namespace
+ * @returns Array of ExposedMethod
+ */
+const extractExposedMethodsFromExtractor = (tsConfigPath: string, sourceFilePaths: string[], defaultNamespace: string): ExposedMethod[] => {
+  const functionMethods = extractFunctionMethods(tsConfigPath, sourceFilePaths);
+  const exposedMethods: ExposedMethod[] = [];
+  
+  for (const functionMethod of functionMethods) {
+    const exposedMethod = convertToExposedMethod(functionMethod, defaultNamespace);
+    if (exposedMethod) {
+      exposedMethods.push(exposedMethod);
+    }
+  }
+  
+  return exposedMethods;
+};
 
 /**
  * Group methods by namespace
@@ -52,7 +128,7 @@ const generateMainHandlers = async (
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
-  const handlers: string[] = [];
+  const registrations: string[] = [];
   
   // Generate imports and collect unique class names
   for (const methods of namespaceGroups.values()) {
@@ -87,16 +163,14 @@ const generateMainHandlers = async (
     for (const method of methods) {
       if (method.className) {
         const instanceVar = `${method.className.toLowerCase()}Instance`;
-        const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
+        const functionId = `${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
-        const args = method.parameters.length > 0 ? `, ${params}` : '';
 
-        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${instanceVar}.${method.methodName}(${params}));`);
+        registrations.push(`controller.register('${functionId}', (${params}) => ${instanceVar}.${method.methodName}(${params}));`);
       } else {
         // Standalone function
-        const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
+        const functionId = `${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
-        const args = method.parameters.length > 0 ? `, ${params}` : '';
 
         let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
 
@@ -111,7 +185,7 @@ const generateMainHandlers = async (
         }
 
         imports.add(`import { ${method.methodName} } from '${importPath}';`);
-        handlers.push(`ipcMain.handle('${channelName}', (_${args}) => ${method.methodName}(${params}));`);
+        registrations.push(`controller.register('${functionId}', (${params}) => ${method.methodName}(${params}));`);
       }
     }
   }
@@ -121,13 +195,27 @@ const generateMainHandlers = async (
     "// Do not edit manually this file.",
     '',
     "import { ipcMain } from 'electron';",
+    "import { createSublimityRpcController } from 'sublimity-rpc';",
     ...Array.from(imports).sort(),
     '',
     '// Create singleton instances',
     ...instanceDeclarations,
     '',
-    '// Register IPC handlers',
-    ...handlers,
+    '// Create RPC controller',
+    'const controller = createSublimityRpcController({',
+    '  onSendMessage: message => {',
+    '    // Send message to preload process',
+    '    global.mainWindow.webContents.send("rpc-message", message);',
+    '  }',
+    '});',
+    '',
+    '// Handle messages from preload process',
+    'ipcMain.on("rpc-message", (_, message) => {',
+    '  controller.insertMessage(message);',
+    '});',
+    '',
+    '// Register RPC functions',
+    ...registrations,
     ''
   ].join('\n');
 };
@@ -155,9 +243,9 @@ const generatePreloadBridge = async (
     const methodsCode = methods.map(method => {
       const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
       const args = method.parameters.map(p => p.name).join(', ');
-      const channelName = `${channelPrefix}:${namespace}:${method.methodName}`;
+      const functionId = `${namespace}:${method.methodName}`;
       
-      return `  ${method.methodName}: (${params}) => ipcRenderer.invoke('${channelName}'${args ? `, ${args}` : ''})`;
+      return `  ${method.methodName}: (${params}) => controller.invoke('${functionId}'${args ? `, ${args}` : ''})`;
     }).join(',\n');
     
     bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n});`);
@@ -168,15 +256,30 @@ const generatePreloadBridge = async (
     "// Do not edit manually this file.",
     '',
     "import { contextBridge, ipcRenderer } from 'electron';",
+    "import { createSublimityRpcController } from 'sublimity-rpc';",
+    '',
     ...typeImports,
     typeImports.length > 0 ? '' : null,
+    '// Create RPC controller',
+    'const controller = createSublimityRpcController({',
+    '  onSendMessage: message => {',
+    '    // Send message to main process',
+    '    ipcRenderer.send("rpc-message", message);',
+    '  }',
+    '});',
+    '',
+    '// Handle messages from main process',
+    'ipcRenderer.on("rpc-message", (_, message) => {',
+    '  controller.insertMessage(message);',
+    '});',
+    '',
     ...bridges,
     ''
   ].filter(line => line !== null);
   
   // Ensure there's always a blank line after imports even if no type imports
   if (typeImports.length === 0) {
-    result.splice(4, 0, '');
+    result.splice(6, 0, '');
   }
   
   return result.join('\n');
@@ -491,30 +594,32 @@ export const createElectronBridgeGenerator =
     channelPrefix: options.channelPrefix ?? "seb"
   };
 
+
   /**
-   * Analyze a file and extract the exposed methods
-   * @param filePath - The path to the file to analyze
-   * @param code - The code of the file to analyze
+   * Analyze multiple files and extract exposed methods using the new extractor
+   * @param filePaths - Array of file paths to analyze
    * @returns The exposed methods
    */
-  const analyzeFile = async (filePath: string, code: string): Promise<ExposedMethod[]> => {
-    // Skip generated files to avoid analysis loops
-    if (isGeneratedFile(
-      filePath,
-      _options.mainProcessHandlerFile,
-      _options.preloadHandlerFile,
-      _options.typeDefinitionsFile)) {
+  const analyzeFiles = async (filePaths: string[]): Promise<ExposedMethod[]> => {
+    // Filter out generated files
+    const filteredFiles = filePaths.filter(filePath => 
+      !isGeneratedFile(
+        filePath,
+        _options.mainProcessHandlerFile,
+        _options.preloadHandlerFile,
+        _options.typeDefinitionsFile)
+    );
+
+    if (filteredFiles.length === 0) {
       return [];
     }
 
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      code,
-      ts.ScriptTarget.Latest,
-      true
-    );
-
-    return await extractExposedMethods(_options.logger, sourceFile, filePath, _options.defaultNamespace);
+    try {
+      return extractExposedMethodsFromExtractor(_options.baseDir!, filteredFiles, _options.defaultNamespace);
+    } catch (error) {
+      _options.logger.error(`Failed to extract exposed methods: ${error}`);
+      return [];
+    }
   };
 
   /**
@@ -567,7 +672,7 @@ export const createElectronBridgeGenerator =
 
   // Returns the generator
   return {
-    analyzeFile,
+    analyzeFiles,
     generateFiles
   };
 };

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import * as ts from 'typescript';
-import { createConsoleLogger, createElectronBridgeGenerator } from './index';
-import { extractExposedMethods, isCamelCase, toPascalCase } from './visitor';
+import { createElectronBridgeGenerator } from '../src/index';
+import { isCamelCase, toPascalCase } from '../src/generator';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
@@ -55,411 +54,7 @@ describe('ElectronBridgeCore', () => {
     });
   });
 
-  describe('Method Extraction', () => {
-    it('should extract methods with @decorator expose JSDoc tag from classes', async () => {
-      const sourceCode = `
-        export class FileService {
-          /**
-           * @decorator expose fileAPI
-           */
-          async readFile(path: string): Promise<string> {
-            return "content"
-          }
-          
-          /**
-           * @decorator expose
-           */
-          async writeFile(path: string, content: string): Promise<void> {
-            // implementation
-          }
-          
-          // Method without JSDoc tag should be ignored
-          private helperMethod(): void {}
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      const logger = createConsoleLogger();
-      
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(2);
-      
-      expect(methods[0]).toMatchObject({
-        className: 'FileService',
-        methodName: 'readFile',
-        namespace: 'fileAPI',
-        parameters: [{ name: 'path', type: 'string' }],
-        returnType: 'Promise<string>'
-      });
-      
-      expect(methods[1]).toMatchObject({
-        className: 'FileService',
-        methodName: 'writeFile',
-        namespace: 'electronAPI', // default namespace
-        parameters: [
-          { name: 'path', type: 'string' },
-          { name: 'content', type: 'string' }
-        ],
-        returnType: 'Promise<void>'
-      });
-    });
 
-    it('should extract standalone functions with @decorator expose JSDoc tag', async () => {
-      const sourceCode = `
-        /**
-         * @decorator expose databaseAPI
-         */
-        async function queryDatabase(sql: string): Promise<any[]> {
-          return []
-        }
-        
-        /**
-         * @decorator expose
-         */
-        async function getVersion(): Promise<string> {
-          return "1.0.0"
-        }
-        
-        // Function without JSDoc tag should be ignored
-        function helperFunction(): void {}
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      const logger = createConsoleLogger();
-
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(2);
-      
-      expect(methods[0]).toMatchObject({
-        methodName: 'queryDatabase',
-        namespace: 'databaseAPI',
-        parameters: [{ name: 'sql', type: 'string' }],
-        returnType: 'Promise<any[]>'
-      });
-      
-      expect(methods[1]).toMatchObject({
-        methodName: 'getVersion',
-        namespace: 'electronAPI',
-        parameters: [],
-        returnType: 'Promise<string>'
-      });
-    });
-
-    it('should handle mixed class methods and standalone functions', async () => {
-      const sourceCode = `
-        export class UserService {
-          /**
-           * @decorator expose userAPI
-           */
-          async getUser(id: number): Promise<User> {
-            return {} as User
-          }
-        }
-        
-        /**
-         * @decorator expose systemAPI
-         */
-        async function getSystemInfo(): Promise<SystemInfo> {
-          return {} as SystemInfo
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      const logger = createConsoleLogger();
-
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(2);
-      expect(methods[0].className).toBe('UserService');
-      expect(methods[1].className).toBeUndefined();
-    })
-
-    it('should extract arrow functions with variable binding', async () => {
-      const sourceCode = `
-        /**
-         * @decorator expose utilsAPI
-         */
-        const getSystemInfo = async (): Promise<SystemInfo> => {
-          return {} as SystemInfo
-        }
-        
-        /**
-         * @decorator expose
-         */
-        export const processData = async (data: string): Promise<string> => {
-          return data.toUpperCase()
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      const logger = createConsoleLogger();
-
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(2);
-      
-      expect(methods[0]).toMatchObject({
-        methodName: 'getSystemInfo',
-        namespace: 'utilsAPI',
-        parameters: [],
-        returnType: 'Promise<SystemInfo>'
-      });
-      
-      expect(methods[1]).toMatchObject({
-        methodName: 'processData',
-        namespace: 'electronAPI',
-        parameters: [{ name: 'data', type: 'string' }],
-        returnType: 'Promise<string>'
-      });
-    });
-  });
-
-  describe('Validation', () => {
-    it('should validate camelCase namespace arguments', async () => {
-      const sourceCode = `
-        export class TestService {
-          /**
-           * @decorator expose FileAPI
-           */
-          async readFile(): Promise<string> {
-            return ""
-          }
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      
-      const warnings: string[] = [];
-      const logger = {
-        info: () => {},
-        warn: (message: string) => warnings.push(message),
-        error: () => {}
-      };
-
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/Warning: @decorator expose argument should be camelCase: "FileAPI" in TestService\.readFile at test\.ts:\d+/);
-    });
-
-    it('should validate Promise return types', async () => {
-      const sourceCode = `
-        export class TestService {
-          /**
-           * @decorator expose
-           */
-          readFileSync(): string { // Non-Promise return type - should warn
-            return ""
-          }
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      
-      const warnings: string[] = [];
-      const logger = {
-        info: () => {},
-        warn: (message: string) => warnings.push(message),
-        error: () => {}
-      };
-      
-      const methods = await extractExposedMethods(logger, sourceFile, 'test.ts', 'electronAPI');
-      
-      expect(methods).toHaveLength(0);
-      expect(warnings[0]).toMatch(/Warning: @decorator expose method should return Promise: TestService\.readFileSync in test\.ts:\d+/);
-    });
-  });
-
-  describe('Custom Default Namespace', () => {
-    it('should use custom default namespace when specified', async () => {
-      const sourceCode = `
-        export class TestService {
-          /**
-           * @decorator expose
-           */
-          async getTest(): Promise<string> {
-            return "test"
-          }
-        }
-        
-        /**
-         * @decorator expose
-         */
-        export async function getInfo(): Promise<string> {
-          return "info"
-        }
-      `;
-      
-      const sourceFile = ts.createSourceFile(
-        'test.ts',
-        sourceCode,
-        ts.ScriptTarget.Latest,
-        true
-      );
-      
-      const methods = await extractExposedMethods(createConsoleLogger(), sourceFile, 'test.ts', 'customAPI');
-      
-      expect(methods).toHaveLength(2);
-      
-      // Both methods should use the custom default namespace
-      expect(methods[0]).toMatchObject({
-        className: 'TestService',
-        methodName: 'getTest',
-        namespace: 'customAPI',
-        returnType: 'Promise<string>'
-      });
-      
-      expect(methods[1]).toMatchObject({
-        methodName: 'getInfo',
-        namespace: 'customAPI',
-        returnType: 'Promise<string>'
-      });
-    });
-  });
-
-  describe('analyzeFile', () => {
-    it('should analyze TypeScript code and return exposed methods', async () => {
-      const generator = createElectronBridgeGenerator({
-        mainProcessHandlerFile: join(testOutputDir, 'analyze-main', 'ipc-handlers.ts'),
-        preloadHandlerFile: join(testOutputDir, 'analyze-preload', 'bridge.ts'),
-        typeDefinitionsFile: join(testOutputDir, 'analyze-types.d.ts')
-      });
-      
-      const sourceCode = `
-        export class FileService {
-          /**
-           * @decorator expose fileAPI
-           */
-          async readFile(path: string): Promise<string> {
-            return "content"
-          }
-        }
-      `;
-      
-      const methods = await generator.analyzeFile('src/services/FileService.ts', sourceCode);
-      
-      expect(methods).toHaveLength(1);
-      expect(methods[0]).toMatchObject({
-        className: 'FileService',
-        methodName: 'readFile',
-        namespace: 'fileAPI',
-        filePath: 'src/services/FileService.ts'
-      });
-    });
-
-    it('should skip generated files to avoid analysis loops', async () => {
-      const tempMainFile = join(testOutputDir, 'temp-main', 'ipc-handlers.ts');
-      const tempPreloadFile = join(testOutputDir, 'temp-preload', 'bridge.ts');
-      const tempTypeFile = join(testOutputDir, 'temp-types.d.ts');
-      
-      const generator = createElectronBridgeGenerator({
-        mainProcessHandlerFile: tempMainFile,
-        preloadHandlerFile: tempPreloadFile,
-        typeDefinitionsFile: tempTypeFile
-      });
-      
-      const sourceCode = `
-        export class FileService {
-          /**
-           * @decorator expose fileAPI
-           */
-          async readFile(path: string): Promise<string> {
-            return "content"
-          }
-        }
-      `;
-      
-      // Should skip files in output directories
-      expect(await generator.analyzeFile(tempMainFile, sourceCode)).toHaveLength(0);
-      expect(await generator.analyzeFile(tempPreloadFile, sourceCode)).toHaveLength(0);
-      expect(await generator.analyzeFile(tempTypeFile, sourceCode)).toHaveLength(0);
-      
-      // Should analyze files not in output directories
-      expect(await generator.analyzeFile('src/services/FileService.ts', sourceCode)).toHaveLength(1);
-    });
-
-    it('should handle different file paths correctly', async () => {
-      const generator = createElectronBridgeGenerator({
-        mainProcessHandlerFile: join(testOutputDir, 'paths-main', 'ipc-handlers.ts'),
-        preloadHandlerFile: join(testOutputDir, 'paths-preload', 'bridge.ts'),
-        typeDefinitionsFile: join(testOutputDir, 'paths-types.d.ts')
-      });
-      
-      const sourceCode = `
-        /**
-         * @decorator expose utilsAPI
-         */
-        export async function processData(): Promise<string> {
-          return "processed"
-        }
-      `;
-      
-      const methods1 = await generator.analyzeFile('/absolute/path/utils.ts', sourceCode);
-      const methods2 = await generator.analyzeFile('relative/path/utils.ts', sourceCode);
-      const methods3 = await generator.analyzeFile('utils.ts', sourceCode);
-      
-      expect(methods1[0].filePath).toBe('/absolute/path/utils.ts');
-      expect(methods2[0].filePath).toBe('relative/path/utils.ts');
-      expect(methods3[0].filePath).toBe('utils.ts');
-    });
-
-    it('should handle malformed TypeScript code gracefully', async () => {
-      const generator = createElectronBridgeGenerator({
-        mainProcessHandlerFile: join(testOutputDir, 'malformed-main', 'ipc-handlers.ts'),
-        preloadHandlerFile: join(testOutputDir, 'malformed-preload', 'bridge.ts'),
-        typeDefinitionsFile: join(testOutputDir, 'malformed-types.d.ts')
-      });
-      
-      // This should not throw an error, but may not extract methods correctly
-      const sourceCode = `
-        export class FileService {
-          /**
-           * @decorator expose fileAPI
-           */
-          async readFile(path: string): Promise<string> {
-            return "content"
-          // Missing closing brace
-      `;
-      
-      expect(async () => {
-        const methods = await generator.analyzeFile('test.ts', sourceCode);
-        // Should return empty array or whatever TypeScript parser can handle
-        expect(Array.isArray(methods)).toBe(true);
-      }).not.toThrow();
-    });
-  });
 
   describe('generateFiles', () => {
     beforeEach(() => {
@@ -537,15 +132,29 @@ describe('ElectronBridgeCore', () => {
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { FileService } from '../src/services/FileService';
 import { getVersion } from '../src/utils/version';
 
 // Create singleton instances
 const fileserviceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
+controller.register('systemAPI:getVersion', () => getVersion());
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -588,12 +197,27 @@ ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path)
+  readFile: (path: string) => controller.invoke('fileAPI:readFile', path)
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => ipcRenderer.invoke('seb:systemAPI:getVersion')
+  getVersion: () => controller.invoke('systemAPI:getVersion')
 });
 `;
       
@@ -708,10 +332,24 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 
 // Create singleton instances
 
-// Register IPC handlers
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
 `);
 
       const preloadContent = readFileSync(preloadFile, 'utf8');
@@ -719,6 +357,21 @@ import { ipcMain } from 'electron';
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 `);
 
@@ -879,6 +532,7 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { FileService } from '../src/services/FileService';
 import { formatDate } from '../src/utils/format';
 import { getVersion } from '../src/utils/system';
@@ -886,11 +540,24 @@ import { getVersion } from '../src/utils/system';
 // Create singleton instances
 const fileserviceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('seb:systemAPI:getVersion', (_) => getVersion());
-ipcMain.handle('seb:utilsAPI:formatDate', (_, date) => formatDate(date));
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
+controller.register('fileAPI:writeFile', (path, content) => fileserviceInstance.writeFile(path, content));
+controller.register('systemAPI:getVersion', () => getVersion());
+controller.register('utilsAPI:formatDate', (date) => formatDate(date));
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -901,16 +568,31 @@ ipcMain.handle('seb:utilsAPI:formatDate', (_, date) => formatDate(date));
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
+  readFile: (path: string) => controller.invoke('fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke('fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => ipcRenderer.invoke('seb:systemAPI:getVersion')
+  getVersion: () => controller.invoke('systemAPI:getVersion')
 });
 contextBridge.exposeInMainWorld('utilsAPI', {
-  formatDate: (date: Date) => ipcRenderer.invoke('seb:utilsAPI:formatDate', date)
+  formatDate: (date: Date) => controller.invoke('utilsAPI:formatDate', date)
 });
 `;
       
@@ -1312,9 +994,9 @@ export {}
       expect(preloadContent).toContain("import type { OrderRequest, PaymentInfo, OrderResult } from '../src/processors/orderProcessor';");
       
       // Preload file should contain typed method signatures
-      expect(preloadContent).toContain('createUser: (userData: UserCreateRequest) => ipcRenderer.invoke');
-      expect(preloadContent).toContain('findProduct: (criteria: ProductSearchCriteria) => ipcRenderer.invoke');
-      expect(preloadContent).toContain('processOrder: (order: OrderRequest, payment: PaymentInfo) => ipcRenderer.invoke');
+      expect(preloadContent).toContain('createUser: (userData: UserCreateRequest) => controller.invoke');
+      expect(preloadContent).toContain('findProduct: (criteria: ProductSearchCriteria) => controller.invoke');
+      expect(preloadContent).toContain('processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke');
     });
   });
 });

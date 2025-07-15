@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'worker_threads';
 import { promises as fs } from 'fs';
-import { createElectronBridgeGenerator } from '../../core/src/index.ts';
+import { createElectronBridgeGenerator } from 'sublimity-electron-bridge-core';
 
 if (!parentPort) {
   throw new Error('parentPort is not available');
@@ -24,21 +24,24 @@ const generator = createElectronBridgeGenerator({
 });
 
 async function processBatch() {
-  // Read and analyze all files in parallel
-  const analysisPromises = workerData.filePaths.map(async (filePath: string) => {
+  // Check file existence
+  const validFiles: string[] = [];
+  for (const filePath of workerData.filePaths) {
     try {
-      await fs.access(filePath); // Check file existence
-      const code = await fs.readFile(filePath, 'utf-8');
-      const methods = await generator.analyzeFile(filePath, code);
-      return methods;
+      await fs.access(filePath);
+      validFiles.push(filePath);
     } catch (error) {
       logger.warn(`Processing error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
-      return [];
     }
-  });
+  }
 
-  const methodArrays = await Promise.all(analysisPromises);
-  const allMethods = methodArrays.flat();
+  if (validFiles.length === 0) {
+    logger.warn('No valid files found to analyze');
+    return;
+  }
+
+  // Use the new analyzeFiles method for better performance and accuracy
+  const allMethods = await generator.analyzeFiles(validFiles);
   
   // Generate files once
   await generator.generateFiles(allMethods);

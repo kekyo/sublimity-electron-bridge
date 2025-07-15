@@ -1,1 +1,1 @@
-export { createElectronBridgeGenerator } from '../../core/src/index.ts';
+export { createElectronBridgeGenerator } from 'sublimity-electron-bridge-core';
