@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { sublimityElectronBridge } from './index'
+import { sublimityElectronBridge } from '../src/index'
 import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -17,11 +17,34 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     if (!existsSync(testFixturesDir)) {
       mkdirSync(testFixturesDir, { recursive: true });
     }
+    
+    // Create tsconfig.json for the new extractor to work
+    const tsConfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+        allowJs: true,
+        strict: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        isolatedModules: true,
+        noEmit: true,
+        jsx: 'preserve'
+      },
+      include: ['**/*.ts', '**/*.tsx'],
+      exclude: ['node_modules', 'dist']
+    };
+    
+    writeFileSync(join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
   });
 
   // Helper function to copy specific test fixtures
   const copyTestFixtures = (filenames: string[]) => {
-    const sourceFixtures = join(__dirname, 'test-fixtures');
+    const sourceFixtures = join(__dirname, '..', 'src', 'test-fixtures');
     filenames.forEach(filename => {
       const sourcePath = join(sourceFixtures, filename);
       const targetPath = join(testFixturesDir, filename);
@@ -85,6 +108,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -93,13 +117,26 @@ import { queryDatabase } from '../test-fixtures/database';
 // Create singleton instances
 const fileserviceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('databaseAPI:executeCommand', (command) => executeCommand(command));
+controller.register('databaseAPI:queryDatabase', (sql) => queryDatabase(sql));
+controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
+controller.register('fileAPI:writeFile', (path, content) => fileserviceInstance.writeFile(path, content));
+controller.register('mainProcess:deleteFile', (path) => fileserviceInstance.deleteFile(path));
+controller.register('mainProcess:getVersion', () => getVersion());
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -110,18 +147,33 @@ ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => controller.invoke('databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => controller.invoke('databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
+  readFile: (path: string) => controller.invoke('fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke('fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
+  deleteFile: (path: string) => controller.invoke('mainProcess:deleteFile', path),
+  getVersion: () => controller.invoke('mainProcess:getVersion')
 });
 `;
     
@@ -201,6 +253,7 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { FileService } from '../test-fixtures/FileService';
 import { executeCommand } from '../test-fixtures/database';
 import { getVersion } from '../test-fixtures/database';
@@ -209,13 +262,26 @@ import { queryDatabase } from '../test-fixtures/database';
 // Create singleton instances
 const fileserviceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('databaseAPI:executeCommand', (command) => executeCommand(command));
+controller.register('databaseAPI:queryDatabase', (sql) => queryDatabase(sql));
+controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
+controller.register('fileAPI:writeFile', (path, content) => fileserviceInstance.writeFile(path, content));
+controller.register('mainProcess:deleteFile', (path) => fileserviceInstance.deleteFile(path));
+controller.register('mainProcess:getVersion', () => getVersion());
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -226,18 +292,33 @@ ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => controller.invoke('databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => controller.invoke('databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
+  readFile: (path: string) => controller.invoke('fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke('fileAPI:writeFile', path, content)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
+  deleteFile: (path: string) => controller.invoke('mainProcess:deleteFile', path),
+  getVersion: () => controller.invoke('mainProcess:getVersion')
 });
 `;
     
@@ -477,10 +558,24 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 
 // Create singleton instances
 
-// Register IPC handlers
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
 `;
 
       const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -506,13 +601,27 @@ import { ipcMain } from 'electron';
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { WatcherTest } from '../test-fixtures/WatcherTest';
 
 // Create singleton instances
 const watchertestInstance = new WatcherTest();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:normalMethod', (_) => watchertestInstance.normalMethod());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('mainProcess:normalMethod', () => watchertestInstance.normalMethod());
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -522,9 +631,24 @@ ipcMain.handle('seb:mainProcess:normalMethod', (_) => watchertestInstance.normal
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 contextBridge.exposeInMainWorld('mainProcess', {
-  normalMethod: () => ipcRenderer.invoke('seb:mainProcess:normalMethod')
+  normalMethod: () => controller.invoke('mainProcess:normalMethod')
 });
 `;
 
@@ -584,13 +708,27 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { WatcherTest2 } from '../test-fixtures/WatcherTest2';
 
 // Create singleton instances
 const watchertest2Instance = new WatcherTest2();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:decoratedMethod', (_) => watchertest2Instance.decoratedMethod());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('mainProcess:decoratedMethod', () => watchertest2Instance.decoratedMethod());
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -613,10 +751,24 @@ ipcMain.handle('seb:mainProcess:decoratedMethod', (_) => watchertest2Instance.de
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 
 // Create singleton instances
 
-// Register IPC handlers
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
 `;
 
       const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -626,6 +778,21 @@ import { ipcMain } from 'electron';
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
 
 `;
 

@@ -13,6 +13,21 @@ describe('CLI Integration Tests', () => {
     testSourceDir = join(tempDir, 'src');
     mkdirSync(testSourceDir, { recursive: true });
 
+    // Create tsconfig.json for the new extractor
+    writeFileSync(join(tempDir, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: {
+        target: "ES2020",
+        module: "ESNext",
+        moduleResolution: "bundler",
+        strict: true,
+        declaration: true,
+        outDir: "./dist",
+        rootDir: "./src"
+      },
+      include: ["src/**/*"],
+      exclude: ["node_modules", "dist"]
+    }, null, 2));
+
     // Create test TypeScript source files
     writeFileSync(join(testSourceDir, 'UserService.ts'), `
 export class UserService {
@@ -107,6 +122,7 @@ interface SystemInfo {
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { UserService } from '../../UserService';
 import { getSystemInfo } from '../../system';
 import { getUptime } from '../../system';
@@ -114,11 +130,24 @@ import { getUptime } from '../../system';
 // Create singleton instances
 const userserviceInstance = new UserService();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('seb:mainProcess:getUptime', (_) => getUptime());
-ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('mainProcess:getCurrentUser', () => userserviceInstance.getCurrentUser());
+controller.register('mainProcess:getUptime', () => getUptime());
+controller.register('systemAPI:getSystemInfo', () => getSystemInfo());
+controller.register('userAPI:getUser', (id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -132,18 +161,34 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../system';
 import type { User } from '../../UserService';
 
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
 contextBridge.exposeInMainWorld('mainProcess', {
-  getCurrentUser: () => ipcRenderer.invoke('seb:mainProcess:getCurrentUser'),
-  getUptime: () => ipcRenderer.invoke('seb:mainProcess:getUptime')
+  getCurrentUser: () => controller.invoke('mainProcess:getCurrentUser'),
+  getUptime: () => controller.invoke('mainProcess:getUptime')
 });
 contextBridge.exposeInMainWorld('systemAPI', {
-  getSystemInfo: () => ipcRenderer.invoke('seb:systemAPI:getSystemInfo')
+  getSystemInfo: () => controller.invoke('systemAPI:getSystemInfo')
 });
 contextBridge.exposeInMainWorld('userAPI', {
-  getUser: (id: number) => ipcRenderer.invoke('seb:userAPI:getUser', id)
+  getUser: (id: number) => controller.invoke('userAPI:getUser', id)
 });
 `;
     
@@ -157,6 +202,7 @@ contextBridge.exposeInMainWorld('userAPI', {
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 
@@ -208,6 +254,7 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { UserService } from '../src/UserService';
 import { getSystemInfo } from '../src/system';
 import { getUptime } from '../src/system';
@@ -215,11 +262,24 @@ import { getUptime } from '../src/system';
 // Create singleton instances
 const userserviceInstance = new UserService();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('seb:mainProcess:getUptime', (_) => getUptime());
-ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('mainProcess:getCurrentUser', () => userserviceInstance.getCurrentUser());
+controller.register('mainProcess:getUptime', () => getUptime());
+controller.register('systemAPI:getSystemInfo', () => getSystemInfo());
+controller.register('userAPI:getUser', (id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -229,7 +289,8 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     const result = await runCLI(['generate', 'src/NonExistentFile.ts']);
     
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toMatch(/Error analyzing.*NonExistentFile\.ts/);
+    expect(result.stderr).toMatch(/Error accessing.*NonExistentFile\.ts/);
+    expect(result.stderr).toMatch(/No valid files found to analyze/);
   });
 
   it('should use custom default namespace', async () => {
@@ -246,6 +307,7 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 import { UserService } from '../../UserService';
 import { getSystemInfo } from '../../system';
 import { getUptime } from '../../system';
@@ -253,11 +315,24 @@ import { getUptime } from '../../system';
 // Create singleton instances
 const userserviceInstance = new UserService();
 
-// Register IPC handlers
-ipcMain.handle('seb:customAPI:getCurrentUser', (_) => userserviceInstance.getCurrentUser());
-ipcMain.handle('seb:customAPI:getUptime', (_) => getUptime());
-ipcMain.handle('seb:systemAPI:getSystemInfo', (_) => getSystemInfo());
-ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id));
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('customAPI:getCurrentUser', () => userserviceInstance.getCurrentUser());
+controller.register('customAPI:getUptime', () => getUptime());
+controller.register('systemAPI:getSystemInfo', () => getSystemInfo());
+controller.register('userAPI:getUser', (id) => userserviceInstance.getUser(id));
 `;
     
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -266,6 +341,7 @@ ipcMain.handle('seb:userAPI:getUser', (_, id) => userserviceInstance.getUser(id)
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 

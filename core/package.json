@@ -1,34 +1,41 @@
 {
   "name": "sublimity-electron-bridge-core",
+  "version": "0.15.4",
   "description": "Core logic for Electron bridge generation",
-  "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
-  "license": "MIT",
   "keywords": [
     "electron",
     "typescript",
     "ast",
     "bridge"
   ],
-  "private": true,
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
-    "test": "vitest run",
-    "test:ui": "vitest --ui",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
   },
-  "dependencies": {
-    "typescript": "^5.8.3"
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rv --npm . && npm i && tsc --noEmit && vite build",
+    "test": "rv --npm . && npm i && tsc --noEmit && vitest run"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0",
+    "sublimity-rpc": ">=0.2.1"
   },
   "devDependencies": {
-    "@types/node": "^24.0.10",
-    "@vitest/ui": "^3.2.4",
-    "vite": "^7.0.2",
-    "vite-plugin-dts": "^4.3.0",
-    "vitest": "^3.2.4"
+    "@types/node": ">=24.0.10",
+    "@vitest/ui": ">=3.2.4",
+    "screw-up": ">=0.8.1",
+    "vite": ">=7.0.2",
+    "vite-plugin-dts": ">=4.3.0",
+    "vitest": ">=3.2.4",
+    "dayjs": ">=1.11.13"
   }
 }

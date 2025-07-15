@@ -3,6 +3,11 @@
   "version": "0.15.4",
   "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kekyo/sublimity-electron-bridge.git"
+  },
+  "homepage": "https://github.com/kekyo/sublimity-electron-bridge#readme",
   "private": true,
   "workspaces": [
     "core",
@@ -14,12 +19,5 @@
     "test": "rv --npm . && npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "clean": "npm run clean --workspaces"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.10",
-    "@vitest/ui": "^3.2.4",
-    "typescript": "^5.8.3",
-    "vite": "^7.0.2",
-    "vitest": "^3.2.4"
   }
 }

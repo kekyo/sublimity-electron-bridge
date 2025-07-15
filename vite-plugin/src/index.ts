@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, type Logger } from '../../core/src/index.ts';
+import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, type Logger } from 'sublimity-electron-bridge-core';
 import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
@@ -34,11 +34,6 @@ export interface SublimityElectronBridgeVitePluginOptions {
    * @remarks Default: 'mainProcess'
    */
   defaultNamespace?: string;
-  /**
-   * Channel prefix.
-   * @remarks Default: 'seb'
-   */
-  channelPrefix?: string;
   /**
    * Whether to enable the worker for processing files (Default: true)
    */
@@ -89,21 +84,24 @@ const collectSourceFiles = async (
 const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptions, filePaths: string[]): Promise<void> => {
   const generator = createElectronBridgeGenerator(options);
   
-  // Read and analyze all files in parallel
-  const analysisPromises = filePaths.map(async (filePath) => {
+  // Check file existence
+  const validFiles: string[] = [];
+  for (const filePath of filePaths) {
     try {
-      await fs.access(filePath); // Check file existence
-      const code = await fs.readFile(filePath, 'utf-8');
-      const methods = await generator.analyzeFile(filePath, code);
-      return methods;
+      await fs.access(filePath);
+      validFiles.push(filePath);
     } catch (error) {
       logger.warn(`Analysis error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
-      return [];
     }
-  });
+  }
 
-  const methodArrays = await Promise.all(analysisPromises);
-  const allMethods = methodArrays.flat();
+  if (validFiles.length === 0) {
+    logger.warn('No valid files found to analyze');
+    return;
+  }
+
+  // Use the new analyzeFiles method for better performance and accuracy
+  const allMethods = await generator.analyzeFiles(validFiles);
   
   // Generate files once
   await generator.generateFiles(allMethods);
@@ -126,7 +124,6 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
           preloadHandlerFile: options.preloadHandlerFile,
           typeDefinitionsFile: options.typeDefinitionsFile,
           defaultNamespace: options.defaultNamespace,
-          channelPrefix: options.channelPrefix,
           baseDir: options.baseDir
         },
         filePaths
@@ -153,7 +150,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 };
 
 const processAllFilesCore = async (
-  logger: Logger, baseDir: string | undefined, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
+  logger: Logger, baseDir: string, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
 
   logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${__VERSION__}]`);
 
@@ -167,7 +164,6 @@ const processAllFilesCore = async (
       preloadHandlerFile: options.preloadHandlerFile,
       typeDefinitionsFile: options.typeDefinitionsFile,
       defaultNamespace: options.defaultNamespace,
-      channelPrefix: options.channelPrefix,
       logger,
       baseDir
     };
@@ -187,7 +183,7 @@ const processAllFilesCore = async (
 
 interface DemandArgs {
   logger: Logger;
-  baseDir: string | undefined;
+  baseDir: string;
   processingPrefix: string;
 }
 
@@ -201,7 +197,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
   let demandArgs: DemandArgs | undefined;
   let runningDeferred: Deferred<void> | undefined;
 
-  const processAllFiles = (logger: Logger, baseDir: string | undefined, processingPrefix: string): Promise<void> => {
+  const processAllFiles = (logger: Logger, baseDir: string, processingPrefix: string): Promise<void> => {
     if (demandDeferred) {
       demandDeferred.resolve();
       demandDeferred = undefined;
@@ -219,6 +215,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       try {
         // Insert processing count before logger message
         const processingLogger = {
+          debug: (msg: string) => logger.debug(`[${processingPrefix}]: ${msg}`),
           info: (msg: string) => logger.info(`[${processingPrefix}]: ${msg}`),
           warn: (msg: string) => logger.warn(`[${processingPrefix}]: ${msg}`),
           error: (msg: string) => logger.error(`[${processingPrefix}]: ${msg}`)
@@ -282,7 +279,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         case 'change':
         case 'unlink': {
           logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
-          await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
+          await processAllFiles(logger, baseDir!, `seb-vite:watch:${pc}`);
         }
       }
     });
@@ -303,6 +300,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
       logger = {
+        debug: config?.customLogger?.info ?? logger.debug,
         info: config?.customLogger?.info ?? logger.info,
         warn: config?.customLogger?.warn ?? logger.warn,
         error: config?.customLogger?.error ?? logger.error,
@@ -312,9 +310,10 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
       logger = {
-        info: config?.logger?.info ?? logger.info,
-        warn: config?.logger?.warn ?? logger.warn,
-        error: config?.logger?.error ?? logger.error,
+        debug: config?.logger?.info ?? config?.customLogger?.info ?? logger.debug,
+        info: config?.logger?.info ?? config?.customLogger?.info ?? logger.info,
+        warn: config?.logger?.warn ?? config?.customLogger?.warn ?? logger.warn,
+        error: config?.logger?.error ?? config?.customLogger?.error ?? logger.error,
       };
       await stopFileWatching();
       await processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);
