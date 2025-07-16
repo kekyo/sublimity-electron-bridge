@@ -143,7 +143,7 @@ export class FileService {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(testBaseDir, 'src/services/FileService.ts')
         }
       ];
       
@@ -206,14 +206,14 @@ export function getVersion(): Promise<string> {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
           returnType: 'Promise<string>',
-          filePath: 'src/utils/version.ts'
+          filePath: join(baseDir, 'src/utils/version.ts')
         }
       ];
       
@@ -254,14 +254,47 @@ controller.register('systemAPI:getVersion', () => getVersion());
     });
 
     it('should generate correct preload bridge content', async () => {
+      const baseDir = join(testOutputDir, 'preload-bridge-test');
       const mainFile = join(testOutputDir, 'main-bridge', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-bridge', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'preload-bridge-types.d.ts');
       
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+}
+`
+        },
+        {
+          path: 'src/utils/version.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export function getVersion(): Promise<string> {
+  return Promise.resolve('1.0.0');
+}
+`
+        }
+      ]);
+      
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile
+        typeDefinitionsFile: typeDefFile,
+        baseDir: baseDir
       });
       
       const methods = [
@@ -271,14 +304,14 @@ controller.register('systemAPI:getVersion', () => getVersion());
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
           returnType: 'Promise<string>',
-          filePath: 'src/utils/version.ts'
+          filePath: join(baseDir, 'src/utils/version.ts')
         }
       ];
       
@@ -292,6 +325,7 @@ controller.register('systemAPI:getVersion', () => getVersion());
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
 
+import type { Promise } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 
 // Create RPC controller
 const controller = createSublimityRpcController({
@@ -318,14 +352,43 @@ contextBridge.exposeInMainWorld('systemAPI', {
     });
 
     it('should generate correct type definitions content', async () => {
+      const baseDir = join(testOutputDir, 'type-definitions-test');
       const mainFile = join(testOutputDir, 'main-types', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-types', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'electron-api.d.ts');
       
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+  
+  /**
+   * @decorator expose
+   */
+  writeFile(path: string, content: string): Promise<void> {
+    return Promise.resolve();
+  }
+}
+`
+        }
+      ]);
+      
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile
+        typeDefinitionsFile: typeDefFile,
+        baseDir: baseDir
       });
       
       const methods = [
@@ -335,7 +398,7 @@ contextBridge.exposeInMainWorld('systemAPI', {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           methodName: 'writeFile',
@@ -345,7 +408,7 @@ contextBridge.exposeInMainWorld('systemAPI', {
             { name: 'content', type: 'string' }
           ],
           returnType: 'Promise<void>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         }
       ];
       
@@ -355,6 +418,8 @@ contextBridge.exposeInMainWorld('systemAPI', {
       
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
+
+import type { Promise } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 
 interface FileAPI {
   readFile(path: string): Promise<string>;
@@ -413,7 +478,7 @@ export class FileService {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         }
       ];
       
@@ -503,14 +568,63 @@ export {}
     });
 
     it('should handle multiple namespaces correctly', async () => {
+      const baseDir = join(testOutputDir, 'multi-namespace-test');
       const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'multi-types.d.ts');
       
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+}
+`
+        },
+        {
+          path: 'src/utils/version.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export function getVersion(): Promise<string> {
+  return Promise.resolve('1.0.0');
+}
+`
+        },
+        {
+          path: 'src/services/DatabaseService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class DatabaseService {
+  /**
+   * @decorator expose
+   */
+  query(sql: string): Promise<any[]> {
+    return Promise.resolve([]);
+  }
+}
+`
+        }
+      ]);
+      
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile
+        typeDefinitionsFile: typeDefFile,
+        baseDir: baseDir
       });
       
       const methods = [
@@ -520,14 +634,14 @@ export {}
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
           returnType: 'Promise<string>',
-          filePath: 'src/utils/version.ts'
+          filePath: join(baseDir, 'src/utils/version.ts')
         },
         {
           className: 'DatabaseService',
@@ -535,7 +649,7 @@ export {}
           namespace: 'dbAPI',
           parameters: [{ name: 'sql', type: 'string' }],
           returnType: 'Promise<any[]>',
-          filePath: 'src/services/DatabaseService.ts'
+          filePath: join(baseDir, 'src/services/DatabaseService.ts')
         }
       ];
       
@@ -550,14 +664,43 @@ export {}
     });
 
     it('should deduplicate identical class imports', async () => {
+      const baseDir = join(testOutputDir, 'dedupe-test');
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'dedupe-types.d.ts');
       
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+  
+  /**
+   * @decorator expose
+   */
+  writeFile(path: string, content: string): Promise<void> {
+    return Promise.resolve();
+  }
+}
+`
+        }
+      ]);
+      
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile
+        typeDefinitionsFile: typeDefFile,
+        baseDir: baseDir
       });
       
       const methods = [
@@ -567,7 +710,7 @@ export {}
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           className: 'FileService',
@@ -575,7 +718,7 @@ export {}
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
           returnType: 'Promise<void>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         }
       ];
       
@@ -661,7 +804,7 @@ export function formatDate(date: Date): string {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }],
           returnType: 'Promise<string>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           className: 'FileService',
@@ -669,21 +812,21 @@ export function formatDate(date: Date): string {
           namespace: 'fileAPI',
           parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
           returnType: 'Promise<void>',
-          filePath: 'src/services/FileService.ts'
+          filePath: join(baseDir, 'src/services/FileService.ts')
         },
         {
           methodName: 'getVersion',
           namespace: 'systemAPI',
           parameters: [],
           returnType: 'Promise<string>',
-          filePath: 'src/utils/system.ts'
+          filePath: join(baseDir, 'src/utils/system.ts')
         },
         {
           methodName: 'formatDate',
           namespace: 'utilsAPI',
           parameters: [{ name: 'date', type: 'Date' }],
           returnType: 'Promise<string>',
-          filePath: 'src/utils/format.ts'
+          filePath: join(baseDir, 'src/utils/format.ts')
         }
       ];
       
@@ -733,6 +876,8 @@ controller.register('utilsAPI:formatDate', (date) => formatDate(date));
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
 
+import type { Date } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es5.d';
+import type { Promise } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 
 // Create RPC controller
 const controller = createSublimityRpcController({
@@ -765,6 +910,9 @@ contextBridge.exposeInMainWorld('utilsAPI', {
       const typeContent = readFileSync(typeDefFile, 'utf8');
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
+
+import type { Date } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es5.d';
+import type { Promise } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 
 interface FileAPI {
   readFile(path: string): Promise<string>;
@@ -874,7 +1022,7 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
           namespace: 'userAPI',
           parameters: [{ name: 'id', type: 'number' }],
           returnType: 'Promise<User>',
-          filePath: 'src/services/UserService.ts'
+          filePath: join(baseDir, 'src/services/UserService.ts')
         },
         {
           className: 'UserService',
@@ -882,7 +1030,7 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
           namespace: 'userAPI',
           parameters: [{ name: 'userData', type: 'CreateUserRequest' }],
           returnType: 'Promise<User>',
-          filePath: 'src/services/UserService.ts'
+          filePath: join(baseDir, 'src/services/UserService.ts')
         },
         {
           methodName: 'processOrder',
@@ -892,7 +1040,7 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
             { name: 'options', type: 'ProcessOptions' }
           ],
           returnType: 'Promise<OrderResult>',
-          filePath: 'src/utils/orderProcessor.ts'
+          filePath: join(baseDir, 'src/utils/orderProcessor.ts')
         }
       ];
       
