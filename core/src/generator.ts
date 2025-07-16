@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import { resolve, dirname, relative } from 'path';
+import * as path from 'path';
 import { promises as fs } from 'fs';
 import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
 /**
@@ -21,6 +22,44 @@ export const toPascalCase = (str: string): string => {
 };
 import { extractFunctionMethods, FunctionMethodInfo } from './extractor';
 import { createConsoleLogger } from '.';
+
+/**
+ * Calculate proper import path from TypeScript API file paths
+ * @param sourceFilePath - File path from TypeScript API (may be relative or absolute)
+ * @param outputDir - Output directory absolute path
+ * @param baseDir - Base directory for resolving relative paths (optional)
+ * @returns Proper relative import path
+ */
+const calculateImportPath = (sourceFilePath: string, outputDir: string, baseDir?: string): string => {
+  let absoluteSourcePath: string;
+  
+  // Handle relative vs absolute paths
+  if (baseDir && !path.isAbsolute(sourceFilePath)) {
+    // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
+    absoluteSourcePath = resolve(baseDir, sourceFilePath);
+  } else {
+    // Otherwise, resolve it as is
+    absoluteSourcePath = resolve(sourceFilePath);
+  }
+  
+  const normalizedOutputDir = resolve(outputDir);
+  
+  // Calculate relative path
+  let importPath = relative(normalizedOutputDir, absoluteSourcePath);
+  
+  // Remove .ts extension
+  importPath = importPath.replace(/\.ts$/, '');
+  
+  // Normalize path separators
+  importPath = importPath.replace(/\\/g, '/');
+  
+  // Ensure relative path format
+  if (!importPath.startsWith('.')) {
+    importPath = './' + importPath;
+  }
+  
+  return importPath;
+};
 
 /**
  * Convert FunctionMethodInfo to ExposedMethod
@@ -114,17 +153,17 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
 /**
  * Generate the main handlers
  * @param namespaceGroups - The grouped methods
- * @param baseDir - The base directory
  * @param outputDir - The output directory
  * @param channelPrefix - Channel prefix
+ * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the main handlers for the exposed methods.
  */
 const generateMainHandlers = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir: string | undefined,
   outputDir: string,
-  channelPrefix: string): Promise<string> => {
+  channelPrefix: string,
+  baseDir?: string): Promise<string> => {
 
   const imports = new Set<string>();
   const singletonInstances = new Set<string>();
@@ -134,18 +173,7 @@ const generateMainHandlers = async (
   for (const methods of namespaceGroups.values()) {
     for (const method of methods) {
       if (method.className) {
-        let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
-        
-        // Convert to relative path if baseDir are provided
-        if (baseDir) {
-          const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
-          // Ensure relative path starts with ./ if it doesn't start with ../
-          if (!importPath.startsWith('.')) {
-            importPath = './' + importPath;
-          }
-        }
-        
+        const importPath = calculateImportPath(method.filePath, outputDir, baseDir);
         imports.add(`import { ${method.className} } from '${importPath}';`);
         singletonInstances.add(method.className);
       }
@@ -172,18 +200,7 @@ const generateMainHandlers = async (
         const functionId = `${namespace}:${method.methodName}`;
         const params = method.parameters.map(p => p.name).join(', ');
 
-        let importPath = method.filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
-
-        // Convert to relative path if baseDir are provided
-        if (baseDir) {
-          const methodFileAbsPath = resolve(baseDir, method.filePath);
-          importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
-          // Ensure relative path starts with ./ if it doesn't start with ../
-          if (!importPath.startsWith('.')) {
-            importPath = './' + importPath;
-          }
-        }
-
+        const importPath = calculateImportPath(method.filePath, outputDir, baseDir);
         imports.add(`import { ${method.methodName} } from '${importPath}';`);
         registrations.push(`controller.register('${functionId}', (${params}) => ${method.methodName}(${params}));`);
       }
@@ -224,20 +241,20 @@ const generateMainHandlers = async (
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
  * @param channelPrefix - Channel prefix
- * @param baseDir - The base directory
  * @param outputDir - The output directory for preload file
+ * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
 const generatePreloadBridge = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   channelPrefix: string,
-  baseDir: string | undefined,
-  outputDir: string): Promise<string> => {
+  outputDir: string,
+  baseDir?: string): Promise<string> => {
   const bridges: string[] = [];
   
   // Generate type imports for preload
-  const typeImports = await generateTypeImports(namespaceGroups, baseDir, outputDir);
+  const typeImports = await generateTypeImports(namespaceGroups, outputDir, baseDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const methodsCode = methods.map(method => {
@@ -396,35 +413,150 @@ const extractCustomTypes = (type: string): string[] => {
 };
 
 /**
+ * Extract custom types and their file paths from TypeAST
+ * @param typeAST - The TypeAST to analyze
+ * @param typeToFilePath - Map to store type name to file path mapping
+ */
+const extractCustomTypesFromAST = (typeAST: any, typeToFilePath: Map<string, string>): void => {
+  if (!typeAST || typeof typeAST !== 'object') return;
+  
+  switch (typeAST.kind) {
+    case 'primitive':
+      // Skip primitive types
+      break;
+      
+    case 'interface':
+      // Use the actual source location from TypeAST
+      if (typeAST.name && typeAST.sourceLocation && typeAST.sourceLocation.fileName) {
+        typeToFilePath.set(typeAST.name, typeAST.sourceLocation.fileName);
+      }
+      
+      // Recursively process properties
+      if (typeAST.properties) {
+        typeAST.properties.forEach((prop: any) => {
+          if (prop.type) {
+            extractCustomTypesFromAST(prop.type, typeToFilePath);
+          }
+        });
+      }
+      
+      // Process type parameters if present
+      if (typeAST.typeParameters) {
+        typeAST.typeParameters.forEach((param: any) => {
+          extractCustomTypesFromAST(param, typeToFilePath);
+        });
+      }
+      break;
+      
+    case 'type-reference':
+      // Process the referenced type
+      if (typeAST.referencedType) {
+        extractCustomTypesFromAST(typeAST.referencedType, typeToFilePath);
+      }
+      
+      // Process type arguments
+      if (typeAST.typeArguments) {
+        typeAST.typeArguments.forEach((arg: any) => {
+          extractCustomTypesFromAST(arg, typeToFilePath);
+        });
+      }
+      break;
+      
+    case 'array':
+      // Process element type
+      if (typeAST.elementType) {
+        extractCustomTypesFromAST(typeAST.elementType, typeToFilePath);
+      }
+      break;
+      
+    case 'function':
+      // Process parameter types
+      if (typeAST.parameters) {
+        typeAST.parameters.forEach((param: any) => {
+          if (param.type) {
+            extractCustomTypesFromAST(param.type, typeToFilePath);
+          }
+        });
+      }
+      
+      // Process return type
+      if (typeAST.returnType) {
+        extractCustomTypesFromAST(typeAST.returnType, typeToFilePath);
+      }
+      break;
+      
+    case 'unknown':
+      // Skip unknown types
+      break;
+  }
+};
+
+/**
  * Generate import statements for custom types
  * @param namespaceGroups - The grouped methods
- * @param baseDir - The base directory
  * @param outputDir - The output directory for type definitions
+ * @param baseDir - Base directory for resolving relative paths
  * @returns The import statements
  */
 const generateTypeImports = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir: string | undefined,
-  outputDir: string): Promise<string[]> => {
+  outputDir: string,
+  baseDir?: string): Promise<string[]> => {
   const imports = new Set<string>();
   const typeToFilePath = new Map<string, string>();
   
-  // Collect all custom types and their file paths
+  // We need to re-extract TypeAST information to get proper file paths
+  // First, collect all file paths from methods
+  const filePaths = new Set<string>();
   for (const methods of namespaceGroups.values()) {
     for (const method of methods) {
-      // Extract types from parameters
-      method.parameters.forEach(param => {
-        const customTypes = extractCustomTypes(param.type);
-        customTypes.forEach(type => {
-          typeToFilePath.set(type, method.filePath);
-        });
-      });
-      
-      // Extract types from return type
-      const returnTypes = extractCustomTypes(method.returnType);
-      returnTypes.forEach(type => {
-        typeToFilePath.set(type, method.filePath);
-      });
+      filePaths.add(method.filePath);
+    }
+  }
+  
+  // Re-extract function methods to get TypeAST information
+  if (filePaths.size > 0) {
+    const tsConfigPath = baseDir || process.cwd(); // Use baseDir if provided, otherwise current directory
+    const functionMethods = extractFunctionMethods(tsConfigPath, Array.from(filePaths));
+    
+    // Create a mapping from method signature to TypeAST info
+    const methodToTypeInfo = new Map<string, FunctionMethodInfo>();
+    functionMethods.forEach(funcInfo => {
+      if (funcInfo.decoratorInfo && funcInfo.decoratorInfo.decorator === 'expose') {
+        const key = `${funcInfo.className || ''}:${funcInfo.name}:${funcInfo.filePath}`;
+        methodToTypeInfo.set(key, funcInfo);
+      }
+    });
+    
+    // Extract types using TypeAST information
+    for (const methods of namespaceGroups.values()) {
+      for (const method of methods) {
+        const key = `${method.className || ''}:${method.methodName}:${method.filePath}`;
+        const typeInfo = methodToTypeInfo.get(key);
+        
+        if (typeInfo) {
+          // Extract types from parameters using TypeAST
+          typeInfo.parameters.forEach(param => {
+            extractCustomTypesFromAST(param.type, typeToFilePath);
+          });
+          
+          // Extract types from return type using TypeAST
+          extractCustomTypesFromAST(typeInfo.returnType, typeToFilePath);
+        } else {
+          // Fallback to string-based extraction
+          method.parameters.forEach(param => {
+            const customTypes = extractCustomTypes(param.type);
+            customTypes.forEach(type => {
+              typeToFilePath.set(type, method.filePath);
+            });
+          });
+          
+          const returnTypes = extractCustomTypes(method.returnType);
+          returnTypes.forEach(type => {
+            typeToFilePath.set(type, method.filePath);
+          });
+        }
+      }
     }
   }
   
@@ -442,18 +574,7 @@ const generateTypeImports = async (
     // Remove duplicates
     const uniqueTypes = [...new Set(types)];
     
-    let importPath = filePath.replace(/\.ts$/, '').replace(/\\/g, '/');
-    
-    // Convert to relative path if baseDir is provided
-    if (baseDir) {
-      const methodFileAbsPath = resolve(baseDir, filePath);
-      importPath = relative(outputDir, methodFileAbsPath).replace(/\.ts$/, '').replace(/\\/g, '/');
-      // Ensure relative path starts with ./ if it doesn't start with ../
-      if (!importPath.startsWith('.')) {
-        importPath = './' + importPath;
-      }
-    }
-    
+    const importPath = calculateImportPath(filePath, outputDir, baseDir);
     imports.add(`import type { ${uniqueTypes.join(', ')} } from '${importPath}';`);
   }
   
@@ -463,20 +584,20 @@ const generateTypeImports = async (
 /**
  * Generate the type definitions
  * @param namespaceGroups - The grouped methods
- * @param baseDir - The base directory
  * @param outputDir - The output directory for type definitions
+ * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the type definitions for the exposed methods.
  */
 const generateTypeDefinitions = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
-  baseDir: string | undefined,
-  outputDir: string): Promise<string> => {
+  outputDir: string,
+  baseDir?: string): Promise<string> => {
   const interfaces: string[] = [];
   const windowProperties: string[] = [];
   
   // Generate type imports
-  const typeImports = await generateTypeImports(namespaceGroups, baseDir, outputDir);
+  const typeImports = await generateTypeImports(namespaceGroups, outputDir, baseDir);
   
   for (const [namespace, methods] of namespaceGroups.entries()) {
     const typeName = toPascalCase(namespace);
@@ -639,7 +760,7 @@ export const createElectronBridgeGenerator =
     const mainFilePath = resolveOutputPath(
       _options.mainProcessHandlerFile);
     const mainHandlersCode = await generateMainHandlers(
-      namespaceGroups, _options.baseDir, dirname(mainFilePath), _options.channelPrefix);
+      namespaceGroups, dirname(mainFilePath), _options.channelPrefix, _options.baseDir);
     const wroteMainHandlers = await safeWriteFile(
       mainFilePath, mainHandlersCode);
 
@@ -647,7 +768,7 @@ export const createElectronBridgeGenerator =
     const preloadFilePath = resolveOutputPath(
       _options.preloadHandlerFile);
     const preloadBridgeCode = await generatePreloadBridge(
-      namespaceGroups, _options.channelPrefix, _options.baseDir, dirname(preloadFilePath));
+      namespaceGroups, _options.channelPrefix, dirname(preloadFilePath), _options.baseDir);
     const wrotePreloadHandlers = await safeWriteFile(
       preloadFilePath, preloadBridgeCode);
 
@@ -655,7 +776,7 @@ export const createElectronBridgeGenerator =
     const typeDefsFilePath = resolveOutputPath(
       _options.typeDefinitionsFile!);
     const typeDefsCode = await generateTypeDefinitions(
-      namespaceGroups, _options.baseDir, dirname(typeDefsFilePath));
+      namespaceGroups, dirname(typeDefsFilePath), _options.baseDir);
     const wroteTypeDefs = await safeWriteFile(
       typeDefsFilePath, typeDefsCode);
 

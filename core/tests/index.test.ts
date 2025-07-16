@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createElectronBridgeGenerator } from '../src/index';
 import { isCamelCase, toPascalCase } from '../src/generator';
-import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from 'fs';
+import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 
@@ -14,6 +14,45 @@ describe('ElectronBridgeCore', () => {
       rmSync(testOutputDir, { recursive: true, force: true });
     }
   });
+
+  // Helper function to create test files
+  const createTestFiles = (baseDir: string, files: { path: string; content: string }[]) => {
+    // Create base directory if it doesn't exist
+    if (!existsSync(baseDir)) {
+      mkdirSync(baseDir, { recursive: true });
+    }
+    
+    // Create tsconfig.json
+    const tsconfig = {
+      compilerOptions: {
+        target: "ES2020",
+        module: "commonjs",
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        declaration: true,
+        outDir: "./dist"
+      },
+      include: ["src/**/*"],
+      exclude: ["node_modules", "dist"]
+    };
+    
+    writeFileSync(join(baseDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+    
+    // Create test files
+    files.forEach(file => {
+      const filePath = join(baseDir, file.path);
+      const dir = resolve(filePath, '..');
+      
+      // Create directory if it doesn't exist
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      
+      writeFileSync(filePath, file.content);
+    });
+  };
 
   describe('ElectronBridgeGenerator', () => {
     it('should create generator with default options', () => {
@@ -65,14 +104,36 @@ describe('ElectronBridgeCore', () => {
     });
 
     it('should generate all three output files', async () => {
+      const testBaseDir = join(testOutputDir, 'test-base');
       const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'types', 'electron-api.d.ts');
       
+      // Create test files
+      createTestFiles(testBaseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+}
+`
+        }
+      ]);
+      
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile
+        typeDefinitionsFile: typeDefFile,
+        baseDir: testBaseDir
       });
       
       const methods = [
@@ -95,15 +156,47 @@ describe('ElectronBridgeCore', () => {
     });
 
     it('should generate correct main handlers content', async () => {
+      const baseDir = join(testOutputDir, 'main-handlers-test');
       const mainFile = join(testOutputDir, 'main-handlers', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-handlers', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'main-handlers-types.d.ts');
+      
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+}
+`
+        },
+        {
+          path: 'src/utils/version.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export function getVersion(): Promise<string> {
+  return Promise.resolve('1.0.0');
+}
+`
+        }
+      ]);
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: testOutputDir
+        baseDir: baseDir
       });
       
       const methods = [
@@ -281,10 +374,30 @@ export {}
     });
 
     it('should handle relative paths when baseDir is specified', async () => {
+      const baseDir = join(testOutputDir, 'relative-test');
       const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'relative-types.d.ts');
-      const baseDir = testOutputDir;
+      
+      // Create test files in the base directory
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+}
+`
+        }
+      ]);
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
@@ -309,7 +422,7 @@ export {}
       const mainContent = readFileSync(mainFile, 'utf8');
       
       // Should use relative path, not absolute path
-      expect(mainContent).toContain("import { FileService } from '../src/services/FileService'");
+      expect(mainContent).toContain("import { FileService } from '../relative-test/src/services/FileService'");
       expect(mainContent).not.toContain(resolve(baseDir, 'src/services/FileService'));
     });
 
@@ -480,15 +593,65 @@ export {}
     });
 
     it('should generate files with complex namespace combinations', async () => {
+      const baseDir = join(testOutputDir, 'complex-test');
       const mainFile = join(testOutputDir, 'complex-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'complex-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'complex-types.d.ts');
+      
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/FileService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class FileService {
+  /**
+   * @decorator expose
+   */
+  readFile(path: string): Promise<string> {
+    return Promise.resolve('file content');
+  }
+  
+  /**
+   * @decorator expose
+   */
+  writeFile(path: string, content: string): Promise<void> {
+    return Promise.resolve();
+  }
+}
+`
+        },
+        {
+          path: 'src/utils/system.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export function getVersion(): Promise<string> {
+  return Promise.resolve('1.0.0');
+}
+`
+        },
+        {
+          path: 'src/utils/format.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}
+`
+        }
+      ]);
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: testOutputDir
+        baseDir: baseDir
       });
       
       const methods = [
@@ -631,15 +794,77 @@ export {}
 
   describe('Type Import Generation', () => {
     it('should generate import statements for custom types in parameters and return values', async () => {
+      const baseDir = join(testOutputDir, 'import-test-base');
       const mainFile = join(testOutputDir, 'import-test-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'import-test-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'import-test-types.d.ts');
+      
+      // Create test files with type definitions
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/UserService.ts',
+          content: `
+export interface User {
+  id: number;
+  name: string;
+}
+
+export interface CreateUserRequest {
+  name: string;
+}
+
+/**
+ * @decorator expose
+ */
+export class UserService {
+  /**
+   * @decorator expose
+   */
+  getUser(id: number): Promise<User> {
+    return Promise.resolve({ id, name: 'John' });
+  }
+  
+  /**
+   * @decorator expose
+   */
+  createUser(userData: CreateUserRequest): Promise<User> {
+    return Promise.resolve({ id: 1, name: userData.name });
+  }
+}
+`
+        },
+        {
+          path: 'src/utils/orderProcessor.ts',
+          content: `
+export interface Order {
+  id: string;
+  amount: number;
+}
+
+export interface ProcessOptions {
+  priority: string;
+}
+
+export interface OrderResult {
+  success: boolean;
+  orderId: string;
+}
+
+/**
+ * @decorator expose
+ */
+export function processOrder(order: Order, options: ProcessOptions): Promise<OrderResult> {
+  return Promise.resolve({ success: true, orderId: order.id });
+}
+`
+        }
+      ]);
       
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: testOutputDir
+        baseDir: baseDir
       });
       
       const methods = [
