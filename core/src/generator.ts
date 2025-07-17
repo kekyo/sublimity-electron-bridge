@@ -1,10 +1,8 @@
-import { resolve, dirname, relative } from 'path';
-import * as path from 'path';
-import { promises as fs } from 'fs';
+import { resolve, dirname, relative, isAbsolute } from 'path';
+import { access, mkdir, readFile, writeFile } from 'fs/promises';
 import { ElectronBridgeOptions, ElectronBridgeGenerator } from './types';
 import { extractFunctions, FunctionInfo, loadTsConfig, SourceCodeFragment, TypeAST } from './extractor';
-import { createConsoleLogger } from '.';
-import ts from 'typescript';
+import { createConsoleLogger } from './logger';
 
 /**
  * Check if a string is camelCase
@@ -42,7 +40,7 @@ const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDi
   let absoluteSourcePath: string;
   
   // Handle relative vs absolute paths
-  if (baseDir && !path.isAbsolute(node.sourceLocation.fileName)) {
+  if (baseDir && !isAbsolute(node.sourceLocation.fileName)) {
     // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
     absoluteSourcePath = resolve(baseDir, node.sourceLocation.fileName);
   } else {
@@ -74,11 +72,10 @@ const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDi
  * @param tsConfig - tsconfig.json object
  * @param baseDir - Base directory for resolving relative paths
  * @param sourceFilePaths - Array of source file paths
- * @param defaultNamespace - Default namespace
  * @returns Array of ExposedFunction
  */
 const extractExposedFunctionsFromExtractor = (
-  tsConfig: any, baseDir: string, sourceFilePaths: string[], defaultNamespace: string): FunctionInfo[] => {
+  tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
   const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
   return functionInfos.
     filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
@@ -515,9 +512,9 @@ const generateTypeDefinitions = (
  */
 const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
   try {
-    await fs.access(dirPath);
+    await access(dirPath);
   } catch {
-    await fs.mkdir(dirPath, { recursive: true });
+    await mkdir(dirPath, { recursive: true });
   }
 };
 
@@ -530,7 +527,7 @@ const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
 const writeFileWhenChanged = async (filePath: string, content: string): Promise<boolean> => {
   try {
     // Check if the file exists and is the same as the content
-    const existingContent = await fs.readFile(filePath, 'utf8');
+    const existingContent = await readFile(filePath, 'utf8');
     if (existingContent === content) {
       // Do nothing (Any watchers will not be notified)
       return false;
@@ -544,7 +541,7 @@ const writeFileWhenChanged = async (filePath: string, content: string): Promise<
   await ensureDirectoryExists(dir);
 
   // Write the file
-  await fs.writeFile(filePath, content, 'utf8');
+  await writeFile(filePath, content, 'utf8');
 
   return true;
 };
@@ -622,7 +619,7 @@ export const createElectronBridgeGenerator =
       return [];
     }
 
-    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir, filteredFiles, defaultNamespace);
+    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir, filteredFiles);
   };
 
   /**

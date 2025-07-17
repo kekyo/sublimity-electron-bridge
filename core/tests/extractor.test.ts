@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('extractFunctions function', () => {
@@ -134,23 +134,25 @@ export const otherArrowFunction = (): Promise<any> => {
 
   beforeEach(async () => {
     // Create temporary directory
-    testOutputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'function-extractor-test-'));
+    const testOutputBaseDir = join(tmpdir(), 'seb-core/generator-test');
+    mkdirSync(testOutputBaseDir, { recursive: true });
+    testOutputDir = mkdtempSync(join(testOutputBaseDir, 'test-'));
     
     // Create src directory
-    const srcDir = path.join(testOutputDir, 'src');
-    fs.mkdirSync(srcDir, { recursive: true });
+    const srcDir = join(testOutputDir, 'src');
+    mkdirSync(srcDir, { recursive: true });
     
     // Set test file paths
-    testFunctionFile = path.join(srcDir, 'test-functions.ts');
-    testClassFile = path.join(srcDir, 'test-classes.ts');
-    testArrowFile = path.join(srcDir, 'test-arrows.ts');
-    tsConfigFile = path.join(testOutputDir, 'tsconfig.json');
+    testFunctionFile = join(srcDir, 'test-functions.ts');
+    testClassFile = join(srcDir, 'test-classes.ts');
+    testArrowFile = join(srcDir, 'test-arrows.ts');
+    tsConfigFile = join(testOutputDir, 'tsconfig.json');
     
     // Create files
-    fs.writeFileSync(testFunctionFile, testFunctionContent);
-    fs.writeFileSync(testClassFile, testClassContent);
-    fs.writeFileSync(testArrowFile, testArrowContent);
-    fs.writeFileSync(tsConfigFile, JSON.stringify(tsConfigContent, null, 2));
+    writeFileSync(testFunctionFile, testFunctionContent);
+    writeFileSync(testClassFile, testClassContent);
+    writeFileSync(testArrowFile, testArrowContent);
+    writeFileSync(tsConfigFile, JSON.stringify(tsConfigContent, null, 2));
   });
 
   it('should extract function declarations with decorator information', () => {
@@ -265,9 +267,9 @@ export const otherArrowFunction = (): Promise<any> => {
     const arrowFunctions = results.filter(fn => fn.kind === 'arrow-function');
 
     // Retreived functions
-    expect(functionDeclarations.map(f => f.name).sort()).toEqual(['complexFunction', 'simpleFunction']);
-    expect(classMethods.map(f => f.name).sort()).toEqual(['getData', 'saveData']);
-    expect(arrowFunctions.map(f => f.name).sort()).toEqual(['arrowFunction', 'complexArrowFunction']);
+    expect(functionDeclarations.map(f => f.name).sort()).toEqual(['complexFunction', 'otherFunction', 'regularFunction', 'simpleFunction']);
+    expect(classMethods.map(f => f.name).sort()).toEqual(['configMethod', 'getData', 'regularMethod', 'saveData', 'systemCall']);
+    expect(arrowFunctions.map(f => f.name).sort()).toEqual(['arrowFunction', 'complexArrowFunction', 'otherArrowFunction', 'regularArrowFunction']);
   });
 
   it('should handle functions without decorators', () => {
@@ -286,7 +288,7 @@ export const otherArrowFunction = (): Promise<any> => {
     
     // Find functions with 'other' decorator
     const otherFunctions = results.filter(fn => fn.jsdocDecorator?.decorator === 'other');
-    expect(otherFunctions.length).toBe(1);
+    expect(otherFunctions.map(f => f.name).sort()).toEqual(['configMethod', 'otherArrowFunction', 'otherFunction']);
     
     // Check that they have decorator info but different decorator type
     otherFunctions.forEach(fn => {
@@ -336,15 +338,14 @@ export const otherArrowFunction = (): Promise<any> => {
     }).toThrow('tsconfig.json not found');
   });
 
-  it('should throw error when no source file paths are provided', () => {
+  it('should returns nothing when no source file paths are provided', () => {
     const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
-    expect(() => {
-      extractFunctions(tsConfig, testOutputDir, []);
-    }).toThrow('Source file paths are not specified');
+    const functions = extractFunctions(tsConfig, testOutputDir, []);
+    expect(functions.length).toBe(0);
   });
 
   it('should handle non-existent source files gracefully', () => {
-    const nonExistentFile = path.join(testOutputDir, 'nonexistent.ts');
+    const nonExistentFile = join(testOutputDir, 'nonexistent.ts');
     const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
     
     // Should not throw, but should warn and return empty results

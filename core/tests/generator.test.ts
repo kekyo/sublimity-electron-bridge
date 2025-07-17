@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createElectronBridgeGenerator } from '../src/index';
-import { isCamelCase, toPascalCase } from '../src/generator';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import { createElectronBridgeGenerator } from '../src/index';
+import { isCamelCase, toPascalCase } from '../src/generator';
 import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('generator function', () => {
@@ -11,7 +11,9 @@ describe('generator function', () => {
   let tsConfigFile;
   
   beforeEach(() => {
-    testOutputDir = mkdtempSync(join(tmpdir(), 'generator-test-'));
+    const testOutputBaseDir = join(tmpdir(), 'seb-core/generator-test');
+    mkdirSync(testOutputBaseDir, { recursive: true });
+    testOutputDir = mkdtempSync(join(testOutputBaseDir, 'test-'));
 
     // Clean up test output directory
     if (existsSync(testOutputDir)) {

@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-core",
-  "version": "0.15.9",
+  "version": "0.15.10",
   "description": "Core logic for Electron bridge generation",
   "keywords": [
     "electron",
