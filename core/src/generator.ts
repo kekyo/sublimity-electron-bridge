@@ -256,13 +256,13 @@ interface ImportDescriptor {
  * @param namespaceGroups - The grouped methods
  * @param outputDir - The output directory
  * @param baseDir - Base directory for resolving relative paths
- * @param includeFunction - Whether to include function names
+ * @param includeFunctionAndExceptChildren - Whether to include function names and except children types
  * @param includeDeclaredType - Whether to include declared type names
  * @returns The import descriptor list, sorted to ensure deterministic order
  */
 const getImportDescriptorList = (
   namespaceGroups: Map<string, FunctionInfo[]>, outputDir: string, baseDir: string | undefined,
-  includeExposedFunction: boolean, includeDeclaredType: boolean): ImportDescriptor[] => {
+  includeFunctionAndExceptChildren: boolean, includeDeclaredType: boolean): ImportDescriptor[] => {
 
   const importPathMap = new Map<string, Set<string>>();
 
@@ -277,13 +277,15 @@ const getImportDescriptorList = (
           importPathMap.set(path, memberNames);
         }
 
-        traverseAndGetImportPathMaps(functionInfo.type, outputDir, baseDir, importPathMap);
+        if (!includeFunctionAndExceptChildren) {
+          traverseAndGetImportPathMaps(functionInfo.type, outputDir, baseDir, importPathMap);
+        }
 
         switch (functionInfo.kind) {
           // Add the function name to the import path map
           // `import { functionName } from 'path';`
           case 'function': {
-            if (includeExposedFunction) {
+            if (includeFunctionAndExceptChildren) {
               memberNames.add(functionInfo.name);
             }
             break;
@@ -300,7 +302,7 @@ const getImportDescriptorList = (
           // Add the function name to the import path map
           // `import { functionName } from 'path';`
           case 'arrow-function':
-            if (includeExposedFunction) {
+            if (includeFunctionAndExceptChildren) {
               memberNames.add(functionInfo.name);
             }
             break;

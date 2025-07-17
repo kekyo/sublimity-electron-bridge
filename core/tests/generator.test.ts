@@ -1509,17 +1509,35 @@ controller.register('userService:createUser', __UserServiceInstance.createUser);
 
       const preloadContent = readFileSync(preloadFile, 'utf8');
 
-      expect(preloadContent).toBe(`// This is auto-generated preload handler by sublimity-electron-bridge.
+      expect(preloadContent).toBe(`// This is auto-generated preloader by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcRenderer } from 'electron';
-import { createSumlimityRpcController } from 'sumlimity-rpc';
+import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
 
-export const bridge = {
-  createUser: (userData: UserCreateRequest) => controller.invoke('createUser', userData),
-  findProduct: (criteria: ProductSearchCriteria) => controller.invoke('findProduct', criteria),
-  processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke('processOrder', order, payment)
-};
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
+contextBridge.exposeInMainWorld('mainProcess', {
+  processOrder: (order, payment) => controller.invoke('mainProcess:processOrder', order, payment)
+});
+contextBridge.exposeInMainWorld('productService', {
+  findProduct: criteria => controller.invoke('productService:findProduct', criteria)
+});
+contextBridge.exposeInMainWorld('userService', {
+  createUser: userData => controller.invoke('userService:createUser', userData)
+});
 `);
 
       const typeContent = readFileSync(typeDefFile, 'utf8');
@@ -1527,31 +1545,25 @@ export const bridge = {
       expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ApiResponse, OrderRequest, OrderResult, PaymentInfo } from './separate-types-base/src/processors/orderProcessor';
-import { Product, ProductSearchCriteria, ProductService } from './separate-types-base/src/services/ProductService';
-import { User, UserCreateRequest, UserService } from './separate-types-base/src/services/UserService';
+import { OrderRequest, OrderResult, PaymentInfo } from './separate-types-base/src/processors/orderProcessor';
+import { Product, ProductSearchCriteria } from './separate-types-base/src/services/ProductService';
+import { User, UserCreateRequest } from './separate-types-base/src/services/UserService';
 
 export interface __mainProcessType {
-  readonly createUser: (userData: UserCreateRequest) => Promise<User>;
-  readonly findProduct: (criteria: ProductSearchCriteria) => Promise<Product[]>;
   readonly processOrder: (order: OrderRequest, payment: PaymentInfo) => Promise<OrderResult>;
-}
-export interface __userServiceType {
-  readonly createUser: (userData: UserCreateRequest) => Promise<User>;
 }
 export interface __productServiceType {
   readonly findProduct: (criteria: ProductSearchCriteria) => Promise<Product[]>;
 }
-export interface __orderProcessorType {
-  readonly processOrder: (order: OrderRequest, payment: PaymentInfo) => Promise<OrderResult>;
+export interface __userServiceType {
+  readonly createUser: (userData: UserCreateRequest) => Promise<User>;
 }
 
 declare global {
   interface Window {
     readonly mainProcess: __mainProcessType;
-    readonly userService: __userServiceType;
     readonly productService: __productServiceType;
-    readonly orderProcessor: __orderProcessorType;
+    readonly userService: __userServiceType;
   }
 }
 
