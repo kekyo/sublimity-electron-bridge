@@ -373,22 +373,22 @@ export class FileService {
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import type { Promise } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
+import { FileService } from './type-definitions-test/src/services/FileService';
 
-interface FileAPI {
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
+export interface MainProcess {
+  readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI;
+    readonly mainProcess: MainProcess;
   }
 }
 
 export {}
 `;
-      
+
       expect(typeContent).toBe(expectedTypeContent);
     });
 
@@ -397,7 +397,7 @@ export {}
       const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'relative-types.d.ts');
-      
+
       // Create test files in the base directory
       createTestFiles(baseDir, [
         {
@@ -417,25 +417,25 @@ export class FileService {
 `
         }
       ]);
-      
+
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
         baseDir: baseDir
       });
-      
+
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
         ]);
-      
+
       await generator.generateFiles(functions);
-      
+
       const mainContent = readFileSync(mainFile, 'utf8');
-      
+
       // Should use relative path, not absolute path
       expect(mainContent).toContain("import { FileService } from '../relative-test/src/services/FileService'");
       expect(mainContent).not.toContain(resolve(baseDir, 'src/services/FileService'));
@@ -445,13 +445,13 @@ export class FileService {
       const mainFile = join(testOutputDir, 'empty-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'empty-types.d.ts');
-      
+
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile
       });
-      
+
       // Should not create files when no methods provided
       await expect(generator.generateFiles([])).resolves.not.toThrow();
 
@@ -522,7 +522,7 @@ export {}
       const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'multi-types.d.ts');
-      
+
       // Create test files
       createTestFiles(baseDir, [
         {
@@ -569,14 +569,14 @@ export class DatabaseService {
 `
         }
       ]);
-      
+
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
         baseDir: baseDir
       });
-      
+
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
         tsConfig, baseDir,
@@ -585,11 +585,11 @@ export class DatabaseService {
           join(baseDir, 'src/utils/version.ts'),
           join(baseDir, 'src/services/DatabaseService.ts')
         ]);
-      
+
       await generator.generateFiles(functions);
-      
+
       const preloadContent = readFileSync(preloadFile, 'utf8');
-      
+
       // Should have all three namespaces
       expect(preloadContent).toContain("contextBridge.exposeInMainWorld('fileAPI'");
       expect(preloadContent).toContain("contextBridge.exposeInMainWorld('systemAPI'");
@@ -601,7 +601,7 @@ export class DatabaseService {
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'dedupe-types.d.ts');
-      
+
       // Create test files
       createTestFiles(baseDir, [
         {
@@ -628,29 +628,29 @@ export class FileService {
 `
         }
       ]);
-      
+
       const generator = createElectronBridgeGenerator({
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
         baseDir: baseDir
       });
-      
+
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
         ]);
-        
+
       await generator.generateFiles(functions);
-      
+
       const mainContent = readFileSync(mainFile, 'utf8');
-      
+
       // Should only have one import statement for FileService
       const importMatches = mainContent.match(/import { FileService } from/g);
       expect(importMatches).toHaveLength(1);
-      
+
       // Should only have one singleton instance
       const instanceMatches = mainContent.match(/const fileserviceInstance = new FileService\(\)/g);
       expect(instanceMatches).toHaveLength(1);

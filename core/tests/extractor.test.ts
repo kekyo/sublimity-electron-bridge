@@ -174,19 +174,19 @@ export const otherArrowFunction = (): Promise<any> => {
     expect(simpleFunction!.kind).toBe('function');
     expect(simpleFunction!.jsdocDecorator?.decorator).toBe('expose');
     expect(simpleFunction!.jsdocDecorator?.args.at(0)).toBe('mainProcess');
-    expect(simpleFunction!.parameters).toHaveLength(1);
-    expect(simpleFunction!.parameters[0].name).toBe('param');
-    expect(simpleFunction!.parameters[0].type.kind).toBe('primitive');
-    expect(simpleFunction!.parameters[0].type.typeString).toBe('string');
-    expect(simpleFunction!.returnType.typeString).toBe('Promise<number>');
+    expect(simpleFunction!.type.parameters).toHaveLength(1);
+    expect(simpleFunction!.type.parameters[0].name).toBe('param');
+    expect(simpleFunction!.type.parameters[0].type.kind).toBe('primitive');
+    expect(simpleFunction!.type.parameters[0].type.typeString).toBe('string');
+    expect(simpleFunction!.type.returnType.typeString).toBe('Promise<number>');
     
     // Check complexFunction
     const complexFunction = exposeFunctions.find(fn => fn.name === 'complexFunction');
     expect(complexFunction).toBeDefined();
     expect(complexFunction!.kind).toBe('function');
     expect(complexFunction!.jsdocDecorator?.args.at(0)).toBe('customNamespace');
-    expect(complexFunction!.parameters).toHaveLength(3);
-    expect(complexFunction!.parameters[2].isRestParameter).toBe(true);
+    expect(complexFunction!.type.parameters).toHaveLength(3);
+    expect(complexFunction!.type.parameters[2].isRestParameter).toBe(true);
   });
 
   it('should extract class methods with decorator information', () => {
@@ -207,16 +207,16 @@ export const otherArrowFunction = (): Promise<any> => {
     expect(getDataMethod!.declaredType?.typeString).toBe('TestService');
     expect(getDataMethod!.jsdocDecorator?.decorator).toBe('expose');
     expect(getDataMethod!.jsdocDecorator?.args.at(0)).toBe('api');
-    expect(getDataMethod!.parameters).toHaveLength(1);
-    expect(getDataMethod!.parameters[0].name).toBe('id');
-    expect(getDataMethod!.parameters[0].type.typeString).toBe('number');
-    expect(getDataMethod!.returnType.typeString).toBe('Promise<string>');
+    expect(getDataMethod!.type.parameters).toHaveLength(1);
+    expect(getDataMethod!.type.parameters[0].name).toBe('id');
+    expect(getDataMethod!.type.parameters[0].type.typeString).toBe('number');
+    expect(getDataMethod!.type.returnType.typeString).toBe('Promise<string>');
     
     // Check saveData method with optional parameter
     const saveDataMethod = exposeMethods.find(fn => fn.name === 'saveData');
     expect(saveDataMethod).toBeDefined();
-    expect(saveDataMethod!.parameters).toHaveLength(2);
-    expect(saveDataMethod!.parameters[1].name).toBe('options');
+    expect(saveDataMethod!.type.parameters).toHaveLength(2);
+    expect(saveDataMethod!.type.parameters[1].name).toBe('options');
     
     // Check systemCall method from AnotherService
     const systemCallMethod = exposeMethods.find(fn => fn.name === 'systemCall');
@@ -242,18 +242,18 @@ export const otherArrowFunction = (): Promise<any> => {
     expect(arrowFunction!.kind).toBe('arrow-function');
     expect(arrowFunction!.jsdocDecorator?.decorator).toBe('expose');
     expect(arrowFunction!.jsdocDecorator?.args.at(0)).toBe('utils');
-    expect(arrowFunction!.parameters).toHaveLength(2);
-    expect(arrowFunction!.parameters[0].name).toBe('x');
-    expect(arrowFunction!.parameters[1].name).toBe('y');
-    expect(arrowFunction!.returnType.typeString).toBe('Promise<number>');
+    expect(arrowFunction!.type.parameters).toHaveLength(2);
+    expect(arrowFunction!.type.parameters[0].name).toBe('x');
+    expect(arrowFunction!.type.parameters[1].name).toBe('y');
+    expect(arrowFunction!.type.returnType.typeString).toBe('Promise<number>');
     
     // Check complexArrowFunction
     const complexArrowFunction = exposeArrows.find(fn => fn.name === 'complexArrowFunction');
     expect(complexArrowFunction).toBeDefined();
     expect(complexArrowFunction!.jsdocDecorator?.args.at(0)).toBe('helpers');
-    expect(complexArrowFunction!.parameters).toHaveLength(2);
-    expect(complexArrowFunction!.parameters[0].name).toBe('data');
-    expect(complexArrowFunction!.parameters[1].name).toBe('callback');
+    expect(complexArrowFunction!.type.parameters).toHaveLength(2);
+    expect(complexArrowFunction!.type.parameters[0].name).toBe('data');
+    expect(complexArrowFunction!.type.parameters[1].name).toBe('callback');
   });
 
   it('should extract all function types from multiple files', () => {
@@ -321,13 +321,13 @@ export const otherArrowFunction = (): Promise<any> => {
     expect(complexArrowFunction).toBeDefined();
     
     // Check complex object parameter - anonymous object types are classified as 'unknown' by TypeScript
-    const dataParam = complexArrowFunction!.parameters[0];
+    const dataParam = complexArrowFunction!.type.parameters[0];
     expect(dataParam.name).toBe('data');
     expect(dataParam.type.kind).toBe('unknown');
     expect(dataParam.type.typeString).toBe('{ name: string; value: number; }');
 
     // Check function parameter
-    const callbackParam = complexArrowFunction!.parameters[1];
+    const callbackParam = complexArrowFunction!.type.parameters[1];
     expect(callbackParam.name).toBe('callback');
     expect(callbackParam.type.kind).toBe('function');
   });

@@ -139,6 +139,91 @@ interface ImportDescriptor {
 }
 
 /**
+ * Set the import path map
+ * @param name - The name to set
+ * @param path - The path to set
+ * @param importPathMap - The import path map
+ */
+const setImportPathMap = (name: string, path: string, importPathMap: Map<string, Set<string>>) => {
+  let memberNames = importPathMap.get(path);
+  if (!memberNames) {
+    memberNames = new Set<string>();
+    importPathMap.set(path, memberNames);
+  }
+  memberNames.add(name);
+}
+
+/**
+ * Traverse the type AST and get the import path maps
+ * @param node - The node to traverse
+ * @param outputDir - The output directory
+ * @param baseDir - The base directory
+ * @param importPathMap - The import path map
+ */
+const traverseAndGetImportPathMaps = (
+  node: TypeAST, outputDir: string, baseDir: string | undefined, importPathMap: Map<string, Set<string>>) => {
+  const path = calculateImportPath(node, outputDir, baseDir);
+  if (path) {
+    // Add the path to the import path map
+    let memberNames = importPathMap.get(path);
+    if (!memberNames) {
+      memberNames = new Set<string>();
+      importPathMap.set(path, memberNames);
+    }
+    switch (node.kind) {
+      // Type reference
+      case 'type-reference': {
+        traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, importPathMap);
+        // Traverse type arguments when available
+        if (node.typeArguments) {
+          for (const typeArgument of node.typeArguments) {
+            traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, importPathMap);
+          }
+        }
+        break;
+      }
+      // Array
+      case 'array': {
+        traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, importPathMap);
+        break;
+      }
+      // Interface
+      case 'interface': {
+        setImportPathMap(node.name, path, importPathMap);
+        // Traverse properties
+        for (const property of node.properties) {
+          traverseAndGetImportPathMaps(property.type, outputDir, baseDir, importPathMap);
+        }
+        // Traverse type parameters when available
+        if (node.typeParameters) {
+          for (const typeParameter of node.typeParameters) {
+            traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, importPathMap);
+          }
+        }
+        break;
+      }
+      // Function
+      case 'function': {
+        // Traverse return type
+        traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, importPathMap);
+        // Traverse parameters
+        for (const param of node.parameters) {
+          traverseAndGetImportPathMaps(param.type, outputDir, baseDir, importPathMap);
+        }
+        break;
+      }
+      // Unknown types
+      case 'unknown': {
+        setImportPathMap(node.typeString, path, importPathMap);
+        break;
+      }
+
+      // Ignore other types.
+    }
+  }
+};
+
+/**
  * Get the import descriptor list for the given namespace groups
  * @param namespaceGroups - The grouped methods
  * @param outputDir - The output directory
@@ -160,6 +245,9 @@ const getImportDescriptorList = (
           memberNames = new Set<string>();
           importPathMap.set(path, memberNames);
         }
+
+        traverseAndGetImportPathMaps(functionInfo.type, outputDir, baseDir, importPathMap);
+
         switch (functionInfo.kind) {
           // Add the function name to the import path map
           // `import { functionName } from 'path';`
@@ -375,24 +463,20 @@ const getPreloadBridgeDescriptorList = (namespaceGroups: Map<string, FunctionInf
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
  * @param channelPrefix - Channel prefix
- * @param outputDir - The output directory for preload file
- * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
 const generatePreloadBridge = (
-  namespaceGroups: Map<string, FunctionInfo[]>,
-  outputDir: string,
-  baseDir: string | undefined): string => {
+  namespaceGroups: Map<string, FunctionInfo[]>): string => {
 
   // Generate preload bridge declarations
   const preloadBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
   const preloadBridgeDeclarations = preloadBridgeDescriptors.map(({ ipcNamespace, functions }) => {
     const functionsCode = functions.map(functionInfo => {
-      const args = functionInfo.parameters.map(p => p.name).join(', ');
-      const params = functionInfo.parameters.length === 1 ? args : `(${args})`;
+      const args = functionInfo.type.parameters.map(p => p.name).join(', ');
+      const params = functionInfo.type.parameters.length === 1 ? args : `(${args})`;
       const functionId = `${ipcNamespace}:${functionInfo.name}`;
-      return `  ${functionInfo.name}: ${params} => controller.invoke('${functionId}'${functionInfo.parameters.length >= 1 ? `, ${args}` : ''})`;
+      return `  ${functionInfo.name}: ${params} => controller.invoke('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
     }).join(',\n');
     return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
   });
@@ -483,8 +567,8 @@ const generateTypeDefinitions = (
   const rendererTypeDescriptors = getRendererTypeDescriptorList(namespaceGroups);
   const rendererTypeDeclarations = rendererTypeDescriptors.map(({ typeName, functions }) => {
     const functionsCode = functions.map(functionInfo => {
-      const params = functionInfo.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
-      return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.returnType};`;   // Functions in interface
+      const params = functionInfo.type.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
+      return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.type.returnType.typeString};`;   // Functions in interface
     }).join('\n');
     return `export interface ${typeName} {\n${functionsCode}\n}\n`;
   });
@@ -494,7 +578,6 @@ const generateTypeDefinitions = (
     return `    readonly ${ipcNamespace}: ${typeName};`;   // Properties in window object
   });
 
-
   const result = [
     "// This is auto-generated type definitions by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
@@ -502,7 +585,6 @@ const generateTypeDefinitions = (
     ...importDeclarations,
     '',
     ...rendererTypeDeclarations,
-    '',
     'declare global {',
     '  interface Window {',
     ...windowProperties,
@@ -617,7 +699,7 @@ export const createElectronBridgeGenerator =
   const analyzeFiles = async (filePaths: string[]): Promise<FunctionInfo[]> => {
 
     // Load the TypeScript configuration object
-    const tsConfigObj = loadTsConfig(tsConfig, baseDir);
+    const tsConfigObj = loadTsConfig(tsConfig, baseDir!);
 
     // Filter out generated files
     const filteredFiles = filePaths.filter(filePath => 
@@ -632,7 +714,7 @@ export const createElectronBridgeGenerator =
       return [];
     }
 
-    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir, filteredFiles);
+    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles);
   };
 
   /**
@@ -644,15 +726,15 @@ export const createElectronBridgeGenerator =
     const namespaceGroups = groupFunctionsByNamespace(functions, defaultNamespace);
 
     // Generate main handlers
-    const mainFilePath = resolve(baseDir, mainProcessHandlerFile);
+    const mainFilePath = resolve(baseDir!, mainProcessHandlerFile);
     const mainHandlersCode = generateMainHandlers(namespaceGroups, dirname(mainFilePath), baseDir);
 
     // Generate preload bridge
-    const preloadFilePath = resolve(baseDir, preloadHandlerFile);
-    const preloadBridgeCode = generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
+    const preloadFilePath = resolve(baseDir!, preloadHandlerFile);
+    const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
 
     // Generate type definitions
-    const typeDefsFilePath = resolve(baseDir, typeDefinitionsFile);
+    const typeDefsFilePath = resolve(baseDir!, typeDefinitionsFile);
     const typeDefsCode = generateTypeDefinitions(namespaceGroups, dirname(typeDefsFilePath), baseDir);
 
     // Write the files

@@ -65,7 +65,6 @@ export interface InterfaceTypeNode extends TypeNode {
   kind: 'interface';
   name: string;
   properties: PropertyNode[];
-  targetLibrary?: string;
   typeParameters?: TypeAST[];
   jsdocDecorator?: JSDocDecorator;
 }
@@ -106,6 +105,14 @@ export interface ArrayTypeNode extends TypeNode {
 }
 
 /**
+ * Generic parameter type node
+ */
+export interface GenericParameterTypeNode extends TypeNode {
+  kind: 'generic-parameter';
+  name: string;
+}
+
+/**
  * Unknown type node
  */
 export interface UnknownTypeNode extends TypeNode {
@@ -115,7 +122,7 @@ export interface UnknownTypeNode extends TypeNode {
 /**
  * Type AST
  */
-export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | FunctionTypeNode | ArrayTypeNode | UnknownTypeNode;
+export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode | UnknownTypeNode;
 
 /**
  * Function information for AST
@@ -124,8 +131,7 @@ export interface FunctionInfo extends SourceCodeFragment {
   kind: 'class-method' | 'function' | 'arrow-function';
   name: string;
   declaredType?: TypeAST;
-  parameters: FunctionParameterNode[];
-  returnType: TypeAST;
+  type: FunctionTypeNode;
   jsdocDecorator?: JSDocDecorator;
 }
 
@@ -390,6 +396,17 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, currentSourceF
       sourceLocation: getSourceLocation(type.symbol?.valueDeclaration, typeSourceFile)
     };
   }
+
+  // Determine generic parameter types
+  if (type.flags & ts.TypeFlags.TypeParameter) {
+    const typeParameter = type as ts.TypeParameter;
+    return {
+      kind: 'generic-parameter',
+      name: typeParameter.symbol.getName(),
+      typeString: checker.typeToString(typeParameter),
+      sourceLocation: getSourceLocation(typeParameter.symbol.valueDeclaration, currentSourceFile)
+    };
+  }
   
   // Other types are treated as unknown types
   return {
@@ -475,28 +492,14 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
             const methodName = member.name.text;
             const jsdocDecorator = extractJSDocDecorator(member);
             
-            // Extract parameter types using AST
-            const parameters = member.parameters.map(param => {
-              const paramType = checker.getTypeAtLocation(param);
-              const isRestParameter = !!(param.dotDotDotToken);
-              return {
-                name: (param.name as ts.Identifier).text,
-                type: convertTypeToAST(paramType, checker, sourceFilePath),
-                isRestParameter
-              };
-            });
-
-            // Extract return type using AST
-            const returnType = member.type ? 
-              convertTypeToAST(checker.getTypeAtLocation(member.type), checker, sourceFilePath) :
-              convertTypeToAST(checker.getReturnTypeOfSignature(checker.getSignatureFromDeclaration(member)!), checker, sourceFilePath);
+            const functionType = convertTypeToAST(
+              checker.getTypeAtLocation(member), checker, sourceFilePath) as FunctionTypeNode;
 
             result.push({
               kind: 'class-method',
               name: methodName,
               declaredType: declaredType,
-              parameters,
-              returnType,
+              type: functionType,
               jsdocDecorator,
               sourceLocation: getSourceLocation(member, sourceFilePath)
             });
@@ -509,27 +512,13 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
         const functionName = node.name.text;
         const jsdocDecorator = extractJSDocDecorator(node);
 
-        // Extract parameter types using AST
-        const parameters = node.parameters.map(param => {
-          const paramType = checker.getTypeAtLocation(param);
-          const isRestParameter = !!(param.dotDotDotToken);
-          return {
-            name: (param.name as ts.Identifier).text,
-            type: convertTypeToAST(paramType, checker, sourceFilePath),
-            isRestParameter
-          };
-        });
-
-        // Extract return type using AST
-        const returnType = node.type ? 
-          convertTypeToAST(checker.getTypeAtLocation(node.type), checker, sourceFilePath) :
-          convertTypeToAST(checker.getReturnTypeOfSignature(checker.getSignatureFromDeclaration(node)!), checker, sourceFilePath);
+        const functionType = convertTypeToAST(
+          checker.getTypeAtLocation(node), checker, sourceFilePath) as FunctionTypeNode;
 
         result.push({
           kind: 'function',
           name: functionName,
-          parameters,
-          returnType,
+          type: functionType,
           jsdocDecorator,
           sourceLocation: getSourceLocation(node, sourceFilePath)
         });
@@ -545,28 +534,14 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
             const functionName = declaration.name.text;
             const jsdocDecorator = extractJSDocDecorator(node);
             const arrowFunc = declaration.initializer;
-            
-            // Extract parameter types using AST
-            const parameters = arrowFunc.parameters.map(param => {
-              const paramType = checker.getTypeAtLocation(param);
-              const isRestParameter = !!(param.dotDotDotToken);
-              return {
-                name: (param.name as ts.Identifier).text,
-                type: convertTypeToAST(paramType, checker, sourceFilePath),
-                isRestParameter
-              };
-            });
 
-            // Extract return type using AST
-            const returnType = arrowFunc.type ? 
-              convertTypeToAST(checker.getTypeAtLocation(arrowFunc.type), checker, sourceFilePath) :
-              convertTypeToAST(checker.getReturnTypeOfSignature(checker.getSignatureFromDeclaration(arrowFunc)!), checker, sourceFilePath);
+            const functionType = convertTypeToAST(
+              checker.getTypeAtLocation(arrowFunc), checker, sourceFilePath) as FunctionTypeNode;
             
             result.push({
               kind: 'arrow-function',
               name: functionName,
-              parameters,
-              returnType,
+              type: functionType,
               jsdocDecorator,
               sourceLocation: getSourceLocation(declaration, sourceFilePath)
             });
