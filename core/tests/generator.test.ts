@@ -1063,10 +1063,8 @@ import { CompilerOptions, Node, Program, SourceFile, SyntaxKind } from 'typescri
 import { TypeScriptService } from './external-import-base/src/services/TypeScriptService';
 
 export interface __mainProcessType {
-  readonly analyzeFile: (filePath: string) => Promise<SourceFile>;
-  readonly createProgram: (rootNames: string[], options: CompilerOptions) => Promise<Program>;
+  readonly getNodeKind: (node: Node) => Promise<SyntaxKind>;
 }
-
 export interface __typeScriptServiceType {
   readonly analyzeFile: (filePath: string) => Promise<SourceFile>;
   readonly createProgram: (rootNames: string[], options: CompilerOptions) => Promise<Program>;
@@ -1176,7 +1174,6 @@ export interface __dataServiceType {
   readonly getItems: (filter: Filter<Item>) => Promise<Item[]>;
   readonly getResults: (query: string) => Promise<SearchResult<Product>>;
 }
-
 export interface __mainProcessType {
   readonly mapData: (input: Filter<Item>) => Promise<Item[]>;
 }
@@ -1297,9 +1294,6 @@ export interface ProcessedUser extends User {
   processed: boolean;
   timestamp: Date;
 }
-/**
- * @decorator expose
- */
 export class MixedService {
   /**
    * @decorator expose
@@ -1350,20 +1344,28 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
-      // Should contain import statements for custom types only
-      expect(typeContent).toContain("import type { User, ProcessedUser } from './mixed-import-base/src/services/MixedService';");
-      expect(typeContent).toContain("import type { ValidationResult } from './mixed-import-base/src/utils/configValidator';");
-      
-      // Currently importing built-in types from node_modules (will be fixed in next step)
-      expect(typeContent).toContain('import type { Date }');
-      expect(typeContent).toContain('import type { Promise }');
-      // Should still generate correct interface definitions
-      expect(typeContent).toContain('interface MixedAPI {');
-      expect(typeContent).toContain('processUserData(user: User, timestamp: Date, metadata: Record<string, UserMetadata>): Promise<ProcessedUser>;');
-      expect(typeContent).toContain('validateConfig(config: AppConfig | string): Promise<ValidationResult>;');
-      
-      // Should contain window interface
-      expect(typeContent).toContain('mixedAPI: MixedAPI;');
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ProcessedUser, User, UserMetadata } from './mixed-import-base/src/services/MixedService';
+import { ValidationResult, AppConfig } from './mixed-import-base/src/utils/configValidator';
+
+export interface __mainProcessType {
+  readonly validateConfig: (config: string | AppConfig) => Promise<ValidationResult>;
+}
+export interface __mixedServiceType {
+  readonly processUserData: (user: User, timestamp: Date, metadata: Record<string, UserMetadata>) => Promise<ProcessedUser>;
+}
+
+declare global {
+  interface Window {
+    readonly mainProcess: __mainProcessType;
+    readonly mixedService: __mixedServiceType;
+  }
+}
+
+export {}
+`);
     });
 
     it('should generate import statements for types from separate definition files', async () => {
@@ -1386,9 +1388,6 @@ export interface UserCreateRequest {
   name: string;
   email: string;
 }
-/**
- * @decorator expose
- */
 export class UserService {
   /**
    * @decorator expose
@@ -1412,9 +1411,6 @@ export interface ProductSearchCriteria {
   minPrice?: number;
   maxPrice?: number;
 }
-/**
- * @decorator expose
- */
 export class ProductService {
   /**
    * @decorator expose
@@ -1477,38 +1473,90 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
         ]);
       await generator.generateFiles(functions);
       
-      const typeContent = readFileSync(typeDefFile, 'utf8');
+      const mainContent = readFileSync(mainFile, 'utf8');
+
+      expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+import { processOrder } from './separate-types-base/src/processors/orderProcessor';
+import { ProductService } from './separate-types-base/src/services/ProductService';
+import { UserService } from './separate-types-base/src/services/UserService';
+
+// Create singleton instances
+const __ProductServiceInstance = new ProductService();
+const __UserServiceInstance = new UserService();
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('mainProcess:processOrder', processOrder);
+controller.register('productService:findProduct', __ProductServiceInstance.findProduct);
+controller.register('userService:createUser', __UserServiceInstance.createUser);
+`);
+
       const preloadContent = readFileSync(preloadFile, 'utf8');
-      
-      // Should contain import statements for custom types from separate files
-      expect(typeContent).toContain("import type { UserCreateRequest, User } from './separate-types-base/src/services/UserService';");
-      expect(typeContent).toContain("import type { ProductSearchCriteria, Product } from './separate-types-base/src/services/ProductService';");
-      expect(typeContent).toContain("import type { OrderRequest, PaymentInfo, OrderResult } from './separate-types-base/src/processors/orderProcessor';");
-      
-      // Should contain interface definitions
-      expect(typeContent).toContain('interface UserAPI {');
-      expect(typeContent).toContain('interface ProductAPI {');
-      expect(typeContent).toContain('interface OrderAPI {');
-      
-      // Should contain methods with imported types
-      expect(typeContent).toContain('createUser(userData: UserCreateRequest): Promise<User>;');
-      expect(typeContent).toContain('findProduct(criteria: ProductSearchCriteria): Promise<Product[]>;');
-      expect(typeContent).toContain('processOrder(order: OrderRequest, payment: PaymentInfo): Promise<OrderResult>;');
-      
-      // Should contain window interface
-      expect(typeContent).toContain('userAPI: UserAPI;');
-      expect(typeContent).toContain('productAPI: ProductAPI;');
-      expect(typeContent).toContain('orderAPI: OrderAPI;');
-      
-      // Preload file should also contain import statements for custom types
-      expect(preloadContent).toContain("import type { UserCreateRequest, User } from '../separate-types-base/src/services/UserService';");
-      expect(preloadContent).toContain("import type { ProductSearchCriteria, Product } from '../separate-types-base/src/services/ProductService';");
-      expect(preloadContent).toContain("import type { OrderRequest, PaymentInfo, OrderResult } from '../separate-types-base/src/processors/orderProcessor';");
-      
-      // Preload file should contain typed method signatures
-      expect(preloadContent).toContain('createUser: (userData: UserCreateRequest) => controller.invoke');
-      expect(preloadContent).toContain('findProduct: (criteria: ProductSearchCriteria) => controller.invoke');
-      expect(preloadContent).toContain('processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke');
+
+      expect(preloadContent).toBe(`// This is auto-generated preload handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcRenderer } from 'electron';
+import { createSumlimityRpcController } from 'sumlimity-rpc';
+
+export const bridge = {
+  createUser: (userData: UserCreateRequest) => controller.invoke('createUser', userData),
+  findProduct: (criteria: ProductSearchCriteria) => controller.invoke('findProduct', criteria),
+  processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke('processOrder', order, payment)
+};
+`);
+
+      const typeContent = readFileSync(typeDefFile, 'utf8');
+
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ApiResponse, OrderRequest, OrderResult, PaymentInfo } from './separate-types-base/src/processors/orderProcessor';
+import { Product, ProductSearchCriteria, ProductService } from './separate-types-base/src/services/ProductService';
+import { User, UserCreateRequest, UserService } from './separate-types-base/src/services/UserService';
+
+export interface __mainProcessType {
+  readonly createUser: (userData: UserCreateRequest) => Promise<User>;
+  readonly findProduct: (criteria: ProductSearchCriteria) => Promise<Product[]>;
+  readonly processOrder: (order: OrderRequest, payment: PaymentInfo) => Promise<OrderResult>;
+}
+export interface __userServiceType {
+  readonly createUser: (userData: UserCreateRequest) => Promise<User>;
+}
+export interface __productServiceType {
+  readonly findProduct: (criteria: ProductSearchCriteria) => Promise<Product[]>;
+}
+export interface __orderProcessorType {
+  readonly processOrder: (order: OrderRequest, payment: PaymentInfo) => Promise<OrderResult>;
+}
+
+declare global {
+  interface Window {
+    readonly mainProcess: __mainProcessType;
+    readonly userService: __userServiceType;
+    readonly productService: __productServiceType;
+    readonly orderProcessor: __orderProcessorType;
+  }
+}
+
+export {}
+`);
     });
   });
 });
