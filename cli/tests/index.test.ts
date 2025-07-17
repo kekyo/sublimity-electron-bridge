@@ -163,6 +163,7 @@ controller.register('userAPI:getUser', (id) => userserviceInstance.getUser(id));
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
 
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../system';
 import type { User } from '../../UserService';
 
@@ -201,6 +202,7 @@ contextBridge.exposeInMainWorld('userAPI', {
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 
@@ -339,6 +341,7 @@ controller.register('userAPI:getUser', (id) => userserviceInstance.getUser(id));
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
+import type { Promise } from '../../../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 import type { SystemInfo } from '../../../system';
 import type { User } from '../../../UserService';
 

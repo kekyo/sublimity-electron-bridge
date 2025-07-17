@@ -502,6 +502,7 @@ const generateTypeImports = async (
   namespaceGroups: Map<string, ExposedMethod[]>,
   outputDir: string,
   baseDir?: string): Promise<string[]> => {
+  console.log(`[DEBUG] generateTypeImports called for outputDir: ${outputDir}`);
   const imports = new Set<string>();
   const typeToFilePath = new Map<string, string>();
   
@@ -570,6 +571,7 @@ const generateTypeImports = async (
     fileToTypes.get(filePath)!.push(type);
   }
   
+  
   for (const [filePath, types] of fileToTypes.entries()) {
     // Remove duplicates
     const uniqueTypes = [...new Set(types)];
@@ -578,7 +580,10 @@ const generateTypeImports = async (
     imports.add(`import type { ${uniqueTypes.join(', ')} } from '${importPath}';`);
   }
   
-  return Array.from(imports).sort();
+  const result = Array.from(imports).sort();
+  console.log(`[DEBUG] generateTypeImports returning ${result.length} imports for ${outputDir}`);
+  result.forEach(imp => console.log(`[DEBUG] Import: ${imp}`));
+  return result;
 };
 
 /**
