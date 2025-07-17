@@ -1348,7 +1348,7 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
 // Do not edit manually this file.
 
 import { ProcessedUser, User, UserMetadata } from './mixed-import-base/src/services/MixedService';
-import { ValidationResult, AppConfig } from './mixed-import-base/src/utils/configValidator';
+import { AppConfig, ValidationResult } from './mixed-import-base/src/utils/configValidator';
 
 export interface __mainProcessType {
   readonly validateConfig: (config: string | AppConfig) => Promise<ValidationResult>;
@@ -1480,9 +1480,9 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
 
 import { ipcMain } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
-import { processOrder } from './separate-types-base/src/processors/orderProcessor';
-import { ProductService } from './separate-types-base/src/services/ProductService';
-import { UserService } from './separate-types-base/src/services/UserService';
+import { processOrder } from '../separate-types-base/src/processors/orderProcessor';
+import { ProductService } from '../separate-types-base/src/services/ProductService';
+import { UserService } from '../separate-types-base/src/services/UserService';
 
 // Create singleton instances
 const __ProductServiceInstance = new ProductService();

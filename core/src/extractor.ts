@@ -39,7 +39,7 @@ export interface SourceCodeFragment {
  * Base interface for type AST
  */
 export interface TypeNode extends SourceCodeFragment {
-  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'unknown';
+  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'or' | 'unknown';
   typeString: string;
 }
 
@@ -124,6 +124,21 @@ export interface TypeAliasNode extends TypeNode {
 }
 
 /**
+ * Binary expression abstract node
+ */
+export interface BinaryExpression extends TypeNode {
+  left: TypeAST;
+  right: TypeAST;
+}
+
+/**
+ * Type OR expression node
+ */
+export interface TypeOrExpressionNode extends BinaryExpression {
+  kind: 'or';
+}
+
+/**
  * Unknown type node
  */
 export interface UnknownTypeNode extends TypeNode {
@@ -133,7 +148,10 @@ export interface UnknownTypeNode extends TypeNode {
 /**
  * Type AST
  */
-export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | TypeAliasNode | FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode | UnknownTypeNode;
+export type TypeAST =
+  PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | TypeAliasNode |
+  FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode |
+  TypeOrExpressionNode | UnknownTypeNode;
 
 /**
  * Function information for AST
@@ -451,6 +469,18 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
     return {
       kind: 'generic-parameter',
       name: typeParameter.symbol.getName(),
+      typeString: checker.typeToString(type),
+      sourceLocation: currentLocation
+    };
+  }
+
+  // Determine type OR expression
+  if (type.flags & ts.TypeFlags.Union) {
+    const unionType = type as ts.UnionType;
+    return {
+      kind: 'or',
+      left: convertTypeToAST(unionType.types[0], checker, currentLocation, visitedInterfaces),
+      right: convertTypeToAST(unionType.types[1], checker, currentLocation, visitedInterfaces),
       typeString: checker.typeToString(type),
       sourceLocation: currentLocation
     };
