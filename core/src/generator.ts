@@ -25,49 +25,6 @@ export const toPascalCase = (str: string): string => {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Calculate proper import path from TypeScript API file paths
- * @param node - The node to calculate the import path for
- * @param outputDir - Output directory absolute path
- * @param baseDir - Base directory for resolving relative paths (optional)
- * @returns Proper relative import path
- */
-const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDir: string | undefined): string | undefined => {
-
-  // TODO: Ignore import path if the source file is primitive and/or inside of TypeScript API.
-  // "What the types for implicitly imported types?"
-  // Maybe: node_modules/typescript/lib/lib.*.d.ts ?
-
-  let absoluteSourcePath: string;
-  
-  // Handle relative vs absolute paths
-  if (baseDir && !isAbsolute(node.sourceLocation.fileName)) {
-    // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
-    absoluteSourcePath = resolve(baseDir, node.sourceLocation.fileName);
-  } else {
-    // Otherwise, resolve it as is
-    absoluteSourcePath = resolve(node.sourceLocation.fileName);
-  }
-  
-  const normalizedOutputDir = resolve(outputDir);
-  
-  // Calculate relative path
-  let importPath = relative(normalizedOutputDir, absoluteSourcePath);
-  
-  // Remove .ts extension
-  importPath = importPath.replace(/\.ts$/, '');
-  
-  // Normalize path separators
-  importPath = importPath.replace(/\\/g, '/');
-  
-  // Ensure relative path format
-  if (!importPath.startsWith('.')) {
-    importPath = './' + importPath;
-  }
-  
-  return importPath;
-};
-
-/**
  * Extract exposed functions using the new extractor
  * @param tsConfig - tsconfig.json object
  * @param baseDir - Base directory for resolving relative paths
@@ -124,6 +81,132 @@ const groupFunctionsByNamespace = (functions: FunctionInfo[], defaultNamespace: 
 /////////////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * Calculate proper import path from TypeScript API file paths
+ * @param node - The node to calculate the import path for
+ * @param outputDir - Output directory absolute path
+ * @param baseDir - Base directory for resolving relative paths (optional)
+ * @returns Proper relative import path
+ */
+const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDir: string | undefined): string | undefined => {
+
+  // Ignore import path if the source file is primitive and/or inside of TypeScript API.
+  if (!node.sourceLocation || node.sourceLocation.packageName === 'typescript') {
+    return undefined;
+  }
+
+  let absoluteSourcePath: string;
+  
+  // Handle relative vs absolute paths
+  if (baseDir && node.sourceLocation && !isAbsolute(node.sourceLocation.fileName)) {
+    // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
+    absoluteSourcePath = resolve(baseDir, node.sourceLocation.fileName);
+  } else {
+    // Otherwise, resolve it as is
+    absoluteSourcePath = resolve(node.sourceLocation.fileName);
+  }
+  
+  const normalizedOutputDir = resolve(outputDir);
+  
+  // Calculate relative path
+  let importPath = relative(normalizedOutputDir, absoluteSourcePath);
+  
+  // Remove .ts extension
+  importPath = importPath.replace(/\.ts$/, '');
+  
+  // Normalize path separators
+  importPath = importPath.replace(/\\/g, '/');
+  
+  // Ensure relative path format
+  if (!importPath.startsWith('.')) {
+    importPath = './' + importPath;
+  }
+  
+  return importPath;
+};
+
+/**
+ * Set the import path map
+ * @param name - The name to set
+ * @param node - The node to set
+ * @param outputDir - The output directory
+ * @param baseDir - The base directory
+ * @param importPathMap - The import path map
+ */
+const setImportPathMap = (name: string, node: TypeAST, outputDir: string, baseDir: string | undefined, importPathMap: Map<string, Set<string>>) => {
+  const path = calculateImportPath(node, outputDir, baseDir);
+  if (path) {
+    // Add the path to the import path map
+    let memberNames = importPathMap.get(path);
+    if (!memberNames) {
+      memberNames = new Set<string>();
+      importPathMap.set(path, memberNames);
+    }
+    memberNames.add(name);
+  }
+}
+
+/**
+ * Traverse the type AST and get the import path maps
+ * @param node - The node to traverse
+ * @param outputDir - The output directory
+ * @param baseDir - The base directory
+ * @param importPathMap - The import path map
+ */
+const traverseAndGetImportPathMaps = (
+  node: TypeAST, outputDir: string, baseDir: string | undefined, importPathMap: Map<string, Set<string>>) => {
+  switch (node.kind) {
+    // Type reference
+    case 'type-reference': {
+      traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, importPathMap);
+      // Traverse type arguments when available
+      if (node.typeArguments) {
+        for (const typeArgument of node.typeArguments) {
+          traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, importPathMap);
+        }
+      }
+      break;
+    }
+    // Array
+    case 'array': {
+      traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, importPathMap);
+      break;
+    }
+    // Interface
+    case 'interface': {
+      setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
+      // Traverse properties
+      for (const property of node.properties) {
+        traverseAndGetImportPathMaps(property.type, outputDir, baseDir, importPathMap);
+      }
+      // Traverse type parameters when available
+      if (node.typeParameters) {
+        for (const typeParameter of node.typeParameters) {
+          traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, importPathMap);
+        }
+      }
+      break;
+    }
+    // Function
+    case 'function': {
+      // Traverse return type
+      traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, importPathMap);
+      // Traverse parameters
+      for (const param of node.parameters) {
+        traverseAndGetImportPathMaps(param.type, outputDir, baseDir, importPathMap);
+      }
+      break;
+    }
+    // Unknown types
+    case 'unknown': {
+      setImportPathMap(node.typeString, node, outputDir, baseDir, importPathMap);
+      break;
+    }
+
+    // Ignore other types.
+  }
+};
+
+/**
  * Import descriptor
  * @remarks This is a descriptor for a single import statement.
  */
@@ -137,91 +220,6 @@ interface ImportDescriptor {
    */
   readonly memberNames: string[];
 }
-
-/**
- * Set the import path map
- * @param name - The name to set
- * @param path - The path to set
- * @param importPathMap - The import path map
- */
-const setImportPathMap = (name: string, path: string, importPathMap: Map<string, Set<string>>) => {
-  let memberNames = importPathMap.get(path);
-  if (!memberNames) {
-    memberNames = new Set<string>();
-    importPathMap.set(path, memberNames);
-  }
-  memberNames.add(name);
-}
-
-/**
- * Traverse the type AST and get the import path maps
- * @param node - The node to traverse
- * @param outputDir - The output directory
- * @param baseDir - The base directory
- * @param importPathMap - The import path map
- */
-const traverseAndGetImportPathMaps = (
-  node: TypeAST, outputDir: string, baseDir: string | undefined, importPathMap: Map<string, Set<string>>) => {
-  const path = calculateImportPath(node, outputDir, baseDir);
-  if (path) {
-    // Add the path to the import path map
-    let memberNames = importPathMap.get(path);
-    if (!memberNames) {
-      memberNames = new Set<string>();
-      importPathMap.set(path, memberNames);
-    }
-    switch (node.kind) {
-      // Type reference
-      case 'type-reference': {
-        traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, importPathMap);
-        // Traverse type arguments when available
-        if (node.typeArguments) {
-          for (const typeArgument of node.typeArguments) {
-            traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, importPathMap);
-          }
-        }
-        break;
-      }
-      // Array
-      case 'array': {
-        traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, importPathMap);
-        break;
-      }
-      // Interface
-      case 'interface': {
-        setImportPathMap(node.name, path, importPathMap);
-        // Traverse properties
-        for (const property of node.properties) {
-          traverseAndGetImportPathMaps(property.type, outputDir, baseDir, importPathMap);
-        }
-        // Traverse type parameters when available
-        if (node.typeParameters) {
-          for (const typeParameter of node.typeParameters) {
-            traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, importPathMap);
-          }
-        }
-        break;
-      }
-      // Function
-      case 'function': {
-        // Traverse return type
-        traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, importPathMap);
-        // Traverse parameters
-        for (const param of node.parameters) {
-          traverseAndGetImportPathMaps(param.type, outputDir, baseDir, importPathMap);
-        }
-        break;
-      }
-      // Unknown types
-      case 'unknown': {
-        setImportPathMap(node.typeString, path, importPathMap);
-        break;
-      }
-
-      // Ignore other types.
-    }
-  }
-};
 
 /**
  * Get the import descriptor list for the given namespace groups
@@ -258,6 +256,7 @@ const getImportDescriptorList = (
           // Add the class name to the import path map
           // `import { ClassName } from 'path';`
           case 'class-method': {
+            // traverseAndGetImportPathMaps(functionInfo.declaredType, outputDir, baseDir, importPathMap);
             memberNames.add(functionInfo.declaredType!.typeString);
             break;
           }

@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
-import * as path from 'path';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
+import { existsSync, readFileSync } from 'fs';
 
 /**
  * Position information within source code
@@ -8,8 +8,8 @@ import { resolve } from 'path';
 export interface SourceLocation {
   /** File path */
   fileName: string;
-  /** Module name */
-  moduleName: string | undefined;
+  /** Package name if available */
+  packageName: string | undefined;
   /** Start line number (1-based) */
   startLine: number;
   /** Start column number (0-based) */
@@ -140,6 +140,36 @@ export interface FunctionInfo extends SourceCodeFragment {
 ///////////////////////////////////////////////////////////////////////////
 
 /**
+ * Get package name from the path.
+ * @param path Path to the package.
+ * @returns Package name.
+ */
+const getPackageNameFromPath = (path: string): string | undefined => {
+  // If path point to 'node_modules' directory:
+  let moduleName: string | undefined;
+  const parts = path.split('/');
+  const indexOfNodeModuleDir = parts.indexOf('node_modules');
+  // Read module's package.json file name.
+  if (indexOfNodeModuleDir !== -1) {
+    // '/foo/node_modules/bar/package.json'
+    const packageJsonPath = join(parts.slice(0, indexOfNodeModuleDir + 1 + 1).join('/'), 'package.json');
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+        moduleName = packageJson.name;
+      } catch {
+        // Ignore error.
+      }
+    }
+    // Fallback to the directory name.
+    if (!moduleName) {
+      moduleName = parts.at(indexOfNodeModuleDir + 1);
+    }
+  }
+  return moduleName;
+};
+
+/**
  * Extract position information from TypeScript Node
  * @param node TypeScript Node
  * @returns SourceLocation
@@ -151,6 +181,10 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
 
   const sourceFile = node.getSourceFile();
   const fileName = sourceFile.fileName;
+
+  // Get module name from the source file.
+  // When not available, try to get it from 'node_modules' directory.
+  const packageName = sourceFile.moduleName ?? getPackageNameFromPath(fileName);
   
   const start = node.getStart();
   const end = node.getEnd();
@@ -161,7 +195,7 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
     
     return {
       fileName,
-      moduleName: sourceFile.moduleName,
+      packageName,
       startLine: startPos.line + 1, // Convert to 1-based
       startColumn: startPos.character,
       endLine: endPos.line + 1, // Convert to 1-based
@@ -171,7 +205,7 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
   
   return {
     fileName,
-    moduleName: undefined,
+    packageName,
     startLine: 1,
     startColumn: 0,
     endLine: 1,
