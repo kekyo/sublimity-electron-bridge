@@ -14,6 +14,15 @@ export const isCamelCase = (str: string): boolean => {
 };
 
 /**
+ * Convert a string to camelCase
+ * @param str - The string to convert
+ * @returns The camelCase string
+ */
+export const toCamelCase = (str: string): string => {
+  return str.charAt(0).toLowerCase() + str.slice(1);
+};
+
+/**
  * Convert a string to PascalCase
  * @param str - The string to convert
  * @returns The PascalCase string
@@ -25,27 +34,24 @@ export const toPascalCase = (str: string): string => {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Extract exposed functions using the new extractor
- * @param tsConfig - tsconfig.json object
- * @param baseDir - Base directory for resolving relative paths
- * @param sourceFilePaths - Array of source file paths
- * @returns Array of ExposedFunction
- */
-const extractExposedFunctionsFromExtractor = (
-  tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
-  const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
-  return functionInfos.
-    filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
-};
-
-/**
  * Get the Electron IPC namespace from the function info
  * @param functionInfo - The function info
  * @param defaultNamespace - The default namespace
  * @returns The Electron IPC namespace
  */
 const getIpcNamespace = (functionInfo: FunctionInfo, defaultNamespace: string): string => {
-  return functionInfo.jsdocDecorator!.args.length >= 1 ? functionInfo.jsdocDecorator!.args[0] : defaultNamespace;
+  // JSDoc decorator namespace argument
+  let ipcNamespace = functionInfo.jsdocDecorator?.args.at(0);
+  if (ipcNamespace) {
+    return ipcNamespace;
+  }
+  // When the function is declared with a type, use the type name as the namespace
+  ipcNamespace = functionInfo.declaredType?.typeString;
+  if (ipcNamespace) {
+    return toCamelCase(ipcNamespace);
+  }
+  // Fallback to the default namespace
+  return defaultNamespace;
 };
 
 /**
@@ -520,7 +526,7 @@ interface RendererTypeDescriptor {
    */
   readonly ipcNamespace: string;
   /**
-   * The type name
+   * The interface type name
    */
   readonly typeName: string;
   /**
@@ -538,7 +544,7 @@ const getRendererTypeDescriptorList = (namespaceGroups: Map<string, FunctionInfo
   return Array.from(namespaceGroups.entries()).
     map(([ipcNamespace, functions]) => ({
       ipcNamespace,
-      typeName: toPascalCase(ipcNamespace),
+      typeName: `__${ipcNamespace}Type`,
       functions: functions.sort((a, b) => a.name.localeCompare(b.name))
     })).
     sort((a, b) => a.ipcNamespace.localeCompare(b.ipcNamespace));
@@ -598,6 +604,20 @@ const generateTypeDefinitions = (
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Extract exposed functions using the new extractor
+ * @param tsConfig - tsconfig.json object
+ * @param baseDir - Base directory for resolving relative paths
+ * @param sourceFilePaths - Array of source file paths
+ * @returns Array of ExposedFunction
+ */
+const extractExposedFunctionsFromExtractor = (
+  tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
+  const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
+  return functionInfos.
+    filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
+};
 
 /**
  * Ensure a directory exists

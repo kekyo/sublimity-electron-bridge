@@ -225,7 +225,9 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
   const typeString = checker.typeToString(type);
 
   // Get source location from the type, or use the parent location if not available
-  const currentLocation = getSourceLocation(type.symbol?.valueDeclaration) ?? parentLocation;
+  const currentLocation = getSourceLocation(
+    type.symbol?.declarations?.at(0)) ??
+    parentLocation;
   
   // Check for Buffer type first (it's a specific global interface)
   if (typeString === 'Buffer' || typeString.startsWith('Buffer<')) {

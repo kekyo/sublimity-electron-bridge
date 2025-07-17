@@ -229,8 +229,8 @@ ipcMain.on("rpc-message", (_, message) => {
 });
 
 // Register RPC functions
+controller.register('fileService:readFile', __FileServiceInstance.readFile);
 controller.register('mainProcess:getVersion', getVersion);
-controller.register('mainProcess:readFile', __FileServiceInstance.readFile);
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -312,9 +312,11 @@ ipcRenderer.on("rpc-message", (_, message) => {
 });
 
 // Expose RPC functions to main process
+contextBridge.exposeInMainWorld('fileService', {
+  readFile: path => controller.invoke('fileService:readFile', path)
+});
 contextBridge.exposeInMainWorld('mainProcess', {
-  getVersion: () => controller.invoke('mainProcess:getVersion'),
-  readFile: path => controller.invoke('mainProcess:readFile', path)
+  getVersion: () => controller.invoke('mainProcess:getVersion')
 });
 `;
       
@@ -377,14 +379,14 @@ export class FileService {
 
 import { FileService } from './type-definitions-test/src/services/FileService';
 
-export interface MainProcess {
+export interface __fileServiceType {
   readonly readFile: (path: string) => Promise<string>;
   readonly writeFile: (path: string, content: string) => Promise<void>;
 }
 
 declare global {
   interface Window {
-    readonly mainProcess: MainProcess;
+    readonly fileService: __fileServiceType;
   }
 }
 
@@ -405,9 +407,6 @@ export {}
         {
           path: 'src/services/FileService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class FileService {
   /**
    * @decorator expose
@@ -439,8 +438,32 @@ export class FileService {
       const mainContent = readFileSync(mainFile, 'utf8');
 
       // Should use relative path, not absolute path
-      expect(mainContent).toContain("import { FileService } from '../relative-test/src/services/FileService'");
-      expect(mainContent).not.toContain(resolve(baseDir, 'src/services/FileService'));
+      expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+import { FileService } from '../relative-test/src/services/FileService';
+
+// Create singleton instances
+const __FileServiceInstance = new FileService();
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('fileService:readFile', __FileServiceInstance.readFile);
+`);
     });
 
     it('should handle empty methods array', async () => {
@@ -490,7 +513,6 @@ ipcMain.on("rpc-message", (_, message) => {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
 
-
 // Create RPC controller
 const controller = createSublimityRpcController({
   onSendMessage: message => {
@@ -504,6 +526,7 @@ ipcRenderer.on("rpc-message", (_, message) => {
   controller.insertMessage(message);
 });
 
+// Expose RPC functions to main process
 `);
 
       const typeDefContent = readFileSync(typeDefFile, 'utf8');
@@ -531,12 +554,9 @@ export {}
         {
           path: 'src/services/FileService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class FileService {
   /**
-   * @decorator expose
+   * @decorator expose fileAPI
    */
   readFile(path: string): Promise<string> {
     return Promise.resolve('file content');
@@ -548,7 +568,7 @@ export class FileService {
           path: 'src/utils/version.ts',
           content: `
 /**
- * @decorator expose
+ * @decorator expose systemAPI
  */
 export function getVersion(): Promise<string> {
   return Promise.resolve('1.0.0');
@@ -558,12 +578,9 @@ export function getVersion(): Promise<string> {
         {
           path: 'src/services/DatabaseService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class DatabaseService {
   /**
-   * @decorator expose
+   * @decorator expose dbAPI
    */
   query(sql: string): Promise<any[]> {
     return Promise.resolve([]);
@@ -594,12 +611,39 @@ export class DatabaseService {
       const preloadContent = readFileSync(preloadFile, 'utf8');
 
       // Should have all three namespaces
-      expect(preloadContent).toContain("contextBridge.exposeInMainWorld('fileAPI'");
-      expect(preloadContent).toContain("contextBridge.exposeInMainWorld('systemAPI'");
-      expect(preloadContent).toContain("contextBridge.exposeInMainWorld('dbAPI'");
+      expect(preloadContent).toBe(`// This is auto-generated preloader by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
+contextBridge.exposeInMainWorld('dbAPI', {
+  query: sql => controller.invoke('dbAPI:query', sql)
+});
+contextBridge.exposeInMainWorld('fileAPI', {
+  readFile: path => controller.invoke('fileAPI:readFile', path)
+});
+contextBridge.exposeInMainWorld('systemAPI', {
+  getVersion: () => controller.invoke('systemAPI:getVersion')
+});
+`);
     });
 
-    it('should deduplicate identical class imports', async () => {
+    it('should combine into one namespace when declared same class', async () => {
       const baseDir = join(testOutputDir, 'dedupe-test');
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
@@ -610,9 +654,6 @@ export class DatabaseService {
         {
           path: 'src/services/FileService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class FileService {
   /**
    * @decorator expose
@@ -650,13 +691,33 @@ export class FileService {
 
       const mainContent = readFileSync(mainFile, 'utf8');
 
-      // Should only have one import statement for FileService
-      const importMatches = mainContent.match(/import { FileService } from/g);
-      expect(importMatches).toHaveLength(1);
+      expect(mainContent).toBe(`// This is auto-generated main process handler by sublimity-electron-bridge.
+// Do not edit manually this file.
 
-      // Should only have one singleton instance
-      const instanceMatches = mainContent.match(/const fileserviceInstance = new FileService\(\)/g);
-      expect(instanceMatches).toHaveLength(1);
+import { ipcMain } from 'electron';
+import { createSublimityRpcController } from 'sublimity-rpc';
+import { FileService } from '../dedupe-test/src/services/FileService';
+
+// Create singleton instances
+const __FileServiceInstance = new FileService();
+
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: message => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('fileService:readFile', __FileServiceInstance.readFile);
+controller.register('fileService:writeFile', __FileServiceInstance.writeFile);
+`);
     });
 
     it('should generate files with complex namespace combinations', async () => {
@@ -670,9 +731,6 @@ export class FileService {
         {
           path: 'src/services/FileService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class FileService {
   /**
    * @decorator expose
@@ -744,7 +802,7 @@ import { formatDate } from '../complex-test/src/utils/format';
 import { getVersion } from '../complex-test/src/utils/system';
 
 // Create singleton instances
-const fileserviceInstance = new FileService();
+const __FileServiceInstance = new FileService();
 
 // Create RPC controller
 const controller = createSublimityRpcController({
@@ -760,10 +818,10 @@ ipcMain.on("rpc-message", (_, message) => {
 });
 
 // Register RPC functions
-controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
-controller.register('fileAPI:writeFile', (path, content) => fileserviceInstance.writeFile(path, content));
-controller.register('systemAPI:getVersion', () => getVersion());
-controller.register('utilsAPI:formatDate', (date) => formatDate(date));
+controller.register('fileService:readFile', __FileServiceInstance.readFile);
+controller.register('fileService:writeFile', __FileServiceInstance.writeFile);
+controller.register('mainProcess:formatDate', formatDate);
+controller.register('mainProcess:getVersion', getVersion);
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -775,9 +833,6 @@ controller.register('utilsAPI:formatDate', (date) => formatDate(date));
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
-
-import type { Date } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es5.d';
-import type { Promise } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
 
 // Create RPC controller
 const controller = createSublimityRpcController({
@@ -792,15 +847,14 @@ ipcRenderer.on("rpc-message", (_, message) => {
   controller.insertMessage(message);
 });
 
-contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => controller.invoke('fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => controller.invoke('fileAPI:writeFile', path, content)
+// Expose RPC functions to main process
+contextBridge.exposeInMainWorld('fileService', {
+  readFile: path => controller.invoke('fileService:readFile', path),
+  writeFile: (path, content) => controller.invoke('fileService:writeFile', path, content)
 });
-contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => controller.invoke('systemAPI:getVersion')
-});
-contextBridge.exposeInMainWorld('utilsAPI', {
-  formatDate: (date: Date) => controller.invoke('utilsAPI:formatDate', date)
+contextBridge.exposeInMainWorld('mainProcess', {
+  formatDate: date => controller.invoke('mainProcess:formatDate', date),
+  getVersion: () => controller.invoke('mainProcess:getVersion')
 });
 `;
       
@@ -811,25 +865,24 @@ contextBridge.exposeInMainWorld('utilsAPI', {
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import type { Date } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es5.d';
-import type { Promise } from '../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
+import { FileService } from './complex-test/src/services/FileService';
+import { formatDate } from './complex-test/src/utils/format';
+import { getVersion } from './complex-test/src/utils/system';
 
-interface FileAPI {
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
+export interface __fileServiceType {
+  readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
 }
-interface SystemAPI {
-  getVersion(): Promise<string>;
-}
-interface UtilsAPI {
-  formatDate(date: Date): Promise<string>;
+
+export interface __mainProcessType {
+  readonly formatDate: (date: Date) => string;
+  readonly getVersion: () => Promise<string>;
 }
 
 declare global {
   interface Window {
-    fileAPI: FileAPI;
-    systemAPI: SystemAPI;
-    utilsAPI: UtilsAPI;
+    readonly fileService: __fileServiceType;
+    readonly mainProcess: __mainProcessType;
   }
 }
 
@@ -861,9 +914,6 @@ export interface CreateUserRequest {
   name: string;
 }
 
-/**
- * @decorator expose
- */
 export class UserService {
   /**
    * @decorator expose
@@ -926,21 +976,31 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
       await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
-      
-      // Should contain import statements for custom types
-      expect(typeContent).toContain("import type { CreateUserRequest, User } from './import-test-base/src/services/UserService';");
-      expect(typeContent).toContain("import type { Order, ProcessOptions, OrderResult } from './import-test-base/src/utils/orderProcessor';");
-      
-      // Should contain interface definitions
-      expect(typeContent).toContain('interface UserAPI {');
-      expect(typeContent).toContain('interface OrderAPI {');
-      expect(typeContent).toContain('getUser(id: number): Promise<User>;');
-      expect(typeContent).toContain('createUser(userData: CreateUserRequest): Promise<User>;');
-      expect(typeContent).toContain('processOrder(order: Order, options: ProcessOptions): Promise<OrderResult>;');
-      
-      // Should contain window interface
-      expect(typeContent).toContain('userAPI: UserAPI;');
-      expect(typeContent).toContain('orderAPI: OrderAPI;');
+
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { CreateUserRequest, User } from './import-test-base/src/services/UserService';
+import { Order, OrderResult, ProcessOptions } from './import-test-base/src/utils/orderProcessor';
+
+export interface __mainProcessType {
+  readonly processOrder: (order: Order, options: ProcessOptions) => Promise<OrderResult>;
+}
+
+export interface __userServiceType {
+  readonly createUser: (userData: CreateUserRequest) => Promise<User>;
+  readonly getUser: (id: number) => Promise<User>;
+}
+
+declare global {
+  interface Window {
+    readonly mainProcess: __mainProcessType;
+    readonly userService: __userServiceType;
+  }
+}
+
+export {}
+`);
     });
 
     it('should generate import statements for external package types', async () => {
