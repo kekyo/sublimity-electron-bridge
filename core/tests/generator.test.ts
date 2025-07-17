@@ -1,25 +1,22 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import dayjs from 'dayjs';
 import { createElectronBridgeGenerator } from '../src/index';
 import { isCamelCase, toPascalCase } from '../src/generator';
 import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('generator function', () => {
+  const testOutputBaseDir = join(tmpdir(), 'seb-test/core/generator', dayjs().format('YYYYMMDD_HHmmssSSS'));
   let testOutputDir;
   let tsConfigFile;
   
-  beforeEach(() => {
-    const testOutputBaseDir = join(tmpdir(), 'seb-core/generator-test');
-    mkdirSync(testOutputBaseDir, { recursive: true });
-    testOutputDir = mkdtempSync(join(testOutputBaseDir, 'test-'));
-
-    // Clean up test output directory
-    if (existsSync(testOutputDir)) {
-      rmSync(testOutputDir, { recursive: true, force: true });
-    }
+  beforeEach(fn => {
+    // Create unique temporary directory for each test
+    testOutputDir = join(testOutputBaseDir, fn.task.name);
     mkdirSync(testOutputDir, { recursive: true });
+    console.info(`Test output directory: ${testOutputDir}`);
   });
 
   // Helper function to create test files
@@ -28,7 +25,7 @@ describe('generator function', () => {
     if (!existsSync(baseDir)) {
       mkdirSync(baseDir, { recursive: true });
     }
-    
+
     // Create tsconfig.json
     const tsconfig = {
       compilerOptions: {
@@ -214,7 +211,7 @@ import { FileService } from '../main-handlers-test/src/services/FileService';
 import { getVersion } from '../main-handlers-test/src/utils/version';
 
 // Create singleton instances
-const fileserviceInstance = new FileService();
+const __FileServiceInstance = new FileService();
 
 // Create RPC controller
 const controller = createSublimityRpcController({
@@ -230,8 +227,8 @@ ipcMain.on("rpc-message", (_, message) => {
 });
 
 // Register RPC functions
-controller.register('fileAPI:readFile', (path) => fileserviceInstance.readFile(path));
-controller.register('systemAPI:getVersion', () => getVersion());
+controller.register('mainProcess:getVersion', getVersion);
+controller.register('mainProcess:readFile', __FileServiceInstance.readFile);
 `;
       
       expect(mainContent).toBe(expectedMainContent);
@@ -299,8 +296,6 @@ export function getVersion(): Promise<string> {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController } from 'sublimity-rpc';
 
-import type { Promise } from '../../../home/kouji/Projects/sublimity-electron-bridge/node_modules/typescript/lib/lib.es2015.promise.d';
-
 // Create RPC controller
 const controller = createSublimityRpcController({
   onSendMessage: message => {
@@ -314,11 +309,10 @@ ipcRenderer.on("rpc-message", (_, message) => {
   controller.insertMessage(message);
 });
 
-contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => controller.invoke('fileAPI:readFile', path)
-});
-contextBridge.exposeInMainWorld('systemAPI', {
-  getVersion: () => controller.invoke('systemAPI:getVersion')
+// Expose RPC functions to main process
+contextBridge.exposeInMainWorld('mainProcess', {
+  getVersion: () => controller.invoke('mainProcess:getVersion'),
+  readFile: path => controller.invoke('mainProcess:readFile', path)
 });
 `;
       

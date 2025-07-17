@@ -154,12 +154,31 @@ const getImportDescriptorList = (
     for (const functionInfo of functions) {
       const path = calculateImportPath(functionInfo, outputDir, baseDir);
       if (path) {
+        // Add the path to the import path map
         let memberNames = importPathMap.get(path);
         if (!memberNames) {
           memberNames = new Set<string>();
           importPathMap.set(path, memberNames);
         }
-        memberNames.add(functionInfo.name);
+        switch (functionInfo.kind) {
+          // Add the function name to the import path map
+          // `import { functionName } from 'path';`
+          case 'function': {
+            memberNames.add(functionInfo.name);
+            break;
+          }
+          // Add the class name to the import path map
+          // `import { ClassName } from 'path';`
+          case 'class-method': {
+            memberNames.add(functionInfo.declaredType!.typeString);
+            break;
+          }
+          // Add the function name to the import path map
+          // `import { functionName } from 'path';`
+          case 'arrow-function':
+            memberNames.add(functionInfo.name);
+            break;
+        }
       }
     }
   }
@@ -201,7 +220,7 @@ const getSingletonInstanceDescriptorList = (namespaceGroups: Map<string, Functio
       const declaredType = functionInfo.declaredType;
       if (declaredType) {
         // When the function is declared with a type, we need to create a singleton instance
-        const singletonInstanceName = `${declaredType.typeString}Instance`;
+        const singletonInstanceName = `__${declaredType.typeString}Instance`;
         singletonInstanceNames.set(declaredType.typeString, singletonInstanceName);
       }
     }
@@ -245,7 +264,7 @@ const getRegistrationDescriptorList = (namespaceGroups: Map<string, FunctionInfo
       const declaredType = functionInfo.declaredType;
       if (declaredType) {
         // When the function is declared with a type, we need to register the function as a member of the singleton instance
-        const singletonInstanceName = `${declaredType.typeString}Instance`;
+        const singletonInstanceName = `__${declaredType.typeString}Instance`;
         registrationDescriptors.push({
           functionId: `${ipcNamespace}:${functionInfo.name}`,
           functionName: `${singletonInstanceName}.${functionInfo.name}`
@@ -275,7 +294,7 @@ const getRegistrationDescriptorList = (namespaceGroups: Map<string, FunctionInfo
 const generateMainHandlers = (
   namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  baseDir?: string): string => {
+  baseDir: string | undefined): string => {
 
   // Generate import declarations
   const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
@@ -364,21 +383,16 @@ const getPreloadBridgeDescriptorList = (namespaceGroups: Map<string, FunctionInf
 const generatePreloadBridge = (
   namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  baseDir?: string): string => {
-
-  // Generate import declarations
-  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
-  const importDeclarations = importDescriptors.map(
-    ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
+  baseDir: string | undefined): string => {
 
   // Generate preload bridge declarations
   const preloadBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
   const preloadBridgeDeclarations = preloadBridgeDescriptors.map(({ ipcNamespace, functions }) => {
     const functionsCode = functions.map(functionInfo => {
-      const params = functionInfo.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
       const args = functionInfo.parameters.map(p => p.name).join(', ');
+      const params = functionInfo.parameters.length === 1 ? args : `(${args})`;
       const functionId = `${ipcNamespace}:${functionInfo.name}`;
-      return `  ${functionInfo.name}: ${params.length === 1 ? params : `(${params})`} => controller.invoke('${functionId}'${args ? `, ${args}` : ''})`;
+      return `  ${functionInfo.name}: ${params} => controller.invoke('${functionId}'${functionInfo.parameters.length >= 1 ? `, ${args}` : ''})`;
     }).join(',\n');
     return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
   });
@@ -389,7 +403,6 @@ const generatePreloadBridge = (
     '',
     "import { contextBridge, ipcRenderer } from 'electron';",
     "import { createSublimityRpcController } from 'sublimity-rpc';",
-    ...importDeclarations,
     '',
     '// Create RPC controller',
     'const controller = createSublimityRpcController({',
@@ -459,7 +472,7 @@ const getRendererTypeDescriptorList = (namespaceGroups: Map<string, FunctionInfo
 const generateTypeDefinitions = (
   namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  baseDir?: string): string => {
+  baseDir: string | undefined): string => {
   
   // Generate import declarations
   const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
@@ -473,7 +486,7 @@ const generateTypeDefinitions = (
       const params = functionInfo.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
       return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.returnType};`;   // Functions in interface
     }).join('\n');
-    return `interface ${typeName} {\n${functionsCode}\n}\n`;
+    return `export interface ${typeName} {\n${functionsCode}\n}\n`;
   });
 
   // Generate window properties
@@ -588,7 +601,7 @@ export const createElectronBridgeGenerator =
   // Makes default values for the options
   const {
     logger = createConsoleLogger(),
-    baseDir = process.cwd(),
+    baseDir,
     tsConfig,
     defaultNamespace = 'mainProcess',
     mainProcessHandlerFile = 'src/main/generated/seb_main.ts',
@@ -602,7 +615,7 @@ export const createElectronBridgeGenerator =
    * @returns The exposed methods
    */
   const analyzeFiles = async (filePaths: string[]): Promise<FunctionInfo[]> => {
-  
+
     // Load the TypeScript configuration object
     const tsConfigObj = loadTsConfig(tsConfig, baseDir);
 
@@ -630,32 +643,31 @@ export const createElectronBridgeGenerator =
     // Sort methods by namespace to ensure deterministic order
     const namespaceGroups = groupFunctionsByNamespace(functions, defaultNamespace);
 
-    // Resolve file paths relative to baseDir
-    const resolveOutputPath = (filePath: string): string => {
-      return resolve(baseDir, filePath);
-    };
-
     // Generate main handlers
-    const mainFilePath = resolveOutputPath(mainProcessHandlerFile);
-    const mainHandlersCode = await generateMainHandlers(namespaceGroups, dirname(mainFilePath), baseDir);
-    const wroteMainHandlers = await writeFileWhenChanged(mainFilePath, mainHandlersCode);
+    const mainFilePath = resolve(baseDir, mainProcessHandlerFile);
+    const mainHandlersCode = generateMainHandlers(namespaceGroups, dirname(mainFilePath), baseDir);
 
     // Generate preload bridge
-    const preloadFilePath = resolveOutputPath(preloadHandlerFile);
-    const preloadBridgeCode = await generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
-    const wrotePreloadHandlers = await writeFileWhenChanged(preloadFilePath, preloadBridgeCode);
+    const preloadFilePath = resolve(baseDir, preloadHandlerFile);
+    const preloadBridgeCode = generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
 
     // Generate type definitions
-    const typeDefsFilePath = resolveOutputPath(typeDefinitionsFile);
-    const typeDefsCode = await generateTypeDefinitions(namespaceGroups, dirname(typeDefsFilePath), baseDir);
-    const wroteTypeDefs = await writeFileWhenChanged(typeDefsFilePath, typeDefsCode);
+    const typeDefsFilePath = resolve(baseDir, typeDefinitionsFile);
+    const typeDefsCode = generateTypeDefinitions(namespaceGroups, dirname(typeDefsFilePath), baseDir);
+
+    // Write the files
+    const results = await Promise.all([
+      writeFileWhenChanged(mainFilePath, mainHandlersCode),
+      writeFileWhenChanged(preloadFilePath, preloadBridgeCode),
+      writeFileWhenChanged(typeDefsFilePath, typeDefsCode)
+    ]);
 
     // Log the summary
-    if (wroteMainHandlers || wrotePreloadHandlers || wroteTypeDefs) {
+    if (results.some(result => result)) {
       logger.info(`Generated files:`);
-      if (wroteMainHandlers) logger.info(`  - ${mainFilePath}`);
-      if (wrotePreloadHandlers) logger.info(`  - ${preloadFilePath}`);
-      if (wroteTypeDefs) logger.info(`  - ${typeDefsFilePath}`);
+      if (results[0]) logger.info(`  - ${mainFilePath}`);
+      if (results[1]) logger.info(`  - ${preloadFilePath}`);
+      if (results[2]) logger.info(`  - ${typeDefsFilePath}`);
       logger.info(`  - Found ${functions.length} exposed functions in ${namespaceGroups.size} namespaces`);
     } else {
       logger.info(`Could not found any exposed functions`);

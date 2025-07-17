@@ -39,7 +39,7 @@ export interface ElectronBridgeOptions {
    * The base directory for the project.
    * @remarks It is used to generate relative paths for the generated files.
    */
-  baseDir?: string;
+  baseDir: string;
   /**
    * The TypeScript configuration object or path to the tsconfig.json file
    * @remarks Default: Use the default TypeScript configuration file from `tsconfig.json` file.

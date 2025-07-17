@@ -443,7 +443,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
   const parsedConfig = ts.parseJsonConfigFileContent(
     tsConfig,
     ts.sys,
-    baseDir
+    baseDir || process.cwd()
   );
 
   // Generate Program for entire project (including all files)

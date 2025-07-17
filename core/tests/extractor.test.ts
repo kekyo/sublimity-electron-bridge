@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
+import dayjs from 'dayjs';
 import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('extractFunctions function', () => {
+  const testOutputBaseDir = join(tmpdir(), 'seb-test/core/extractor', dayjs().format('YYYYMMDD_HHmmssSSS'));
   let testOutputDir: string;
   let testFunctionFile: string;
   let testClassFile: string;
@@ -132,12 +134,12 @@ export const otherArrowFunction = (): Promise<any> => {
     exclude: ["node_modules", "dist"]
   };
 
-  beforeEach(async () => {
-    // Create temporary directory
-    const testOutputBaseDir = join(tmpdir(), 'seb-core/generator-test');
-    mkdirSync(testOutputBaseDir, { recursive: true });
-    testOutputDir = mkdtempSync(join(testOutputBaseDir, 'test-'));
-    
+  beforeEach(fn => {
+    // Create unique temporary directory for each test
+    testOutputDir = join(testOutputBaseDir, fn.task.name);
+    mkdirSync(testOutputDir, { recursive: true });
+    console.info(`Test output directory: ${testOutputDir}`);
+
     // Create src directory
     const srcDir = join(testOutputDir, 'src');
     mkdirSync(srcDir, { recursive: true });
