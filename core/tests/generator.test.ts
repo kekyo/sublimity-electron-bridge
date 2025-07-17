@@ -4,7 +4,7 @@ import { isCamelCase, toPascalCase } from '../src/generator';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
-import { extractFunctions } from '../src/extractor';
+import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('generator function', () => {
   let testOutputDir;
@@ -132,8 +132,9 @@ export class FileService {
         baseDir: testBaseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, testBaseDir);
       const functions = extractFunctions(
-        tsConfigFile, testBaseDir,
+        tsConfig, testBaseDir,
         [
           join(testBaseDir, 'src/services/FileService.ts')
         ]);
@@ -190,8 +191,9 @@ export function getVersion(): Promise<string> {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts')
@@ -277,8 +279,9 @@ export function getVersion(): Promise<string> {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts')
@@ -360,8 +363,9 @@ export class FileService {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
         ]);
@@ -425,8 +429,9 @@ export class FileService {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
         ]);
@@ -576,8 +581,9 @@ export class DatabaseService {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts'),
@@ -634,8 +640,9 @@ export class FileService {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
         ]);
@@ -715,8 +722,9 @@ export function formatDate(date: Date): string {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/system.ts'),
@@ -908,8 +916,9 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/UserService.ts'),
           join(baseDir, 'src/utils/orderProcessor.ts')
@@ -988,8 +997,9 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/TypeScriptService.ts'),
           join(baseDir, 'src/utils/nodeUtils.ts')
@@ -1083,8 +1093,9 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/DataService.ts'),
           join(baseDir, 'src/utils/mapper.ts')
@@ -1157,8 +1168,9 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/BuiltinService.ts'),
           join(baseDir, 'src/utils/builtinUtils.ts')
@@ -1246,11 +1258,12 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/MixedService.ts'),
-          join(baseDir, 'src/services/configValidator.ts')
+          join(baseDir, 'src/utils/configValidator.ts')
         ]);
       
       await generator.generateFiles(functions);
@@ -1374,8 +1387,9 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
         baseDir: baseDir
       });
       
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
-        tsConfigFile, baseDir,
+        tsConfig, baseDir,
         [
           join(baseDir, 'src/services/UserService.ts'),
           join(baseDir, 'src/services/ProductService.ts'),

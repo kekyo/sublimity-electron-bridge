@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { extractFunctions } from '../src/extractor';
+import { extractFunctions, loadTsConfig } from '../src/extractor';
 
 describe('extractFunctions function', () => {
   let testOutputDir: string;
@@ -154,7 +154,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should extract function declarations with decorator information', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testFunctionFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testFunctionFile]);
     
     expect(results).toBeDefined();
     expect(results.length).toBeGreaterThan(0);
@@ -185,7 +186,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should extract class methods with decorator information', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testClassFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testClassFile]);
     
     expect(results).toBeDefined();
     expect(results.length).toBeGreaterThan(0);
@@ -220,7 +222,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should extract arrow functions with decorator information', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testArrowFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testArrowFile]);
     
     expect(results).toBeDefined();
     expect(results.length).toBeGreaterThan(0);
@@ -250,7 +253,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should extract all function types from multiple files', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testFunctionFile, testClassFile, testArrowFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testFunctionFile, testClassFile, testArrowFile]);
     
     expect(results).toBeDefined();
     expect(results.length).toBeGreaterThan(0);
@@ -267,7 +271,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should handle functions without decorators', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testFunctionFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testFunctionFile]);
     
     // Find functions without decorators
     const functionsWithoutDecorator = results.filter(fn => !fn.jsdocDecorator);
@@ -276,7 +281,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should handle different decorator types', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testFunctionFile, testClassFile, testArrowFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testFunctionFile, testClassFile, testArrowFile]);
     
     // Find functions with 'other' decorator
     const otherFunctions = results.filter(fn => fn.jsdocDecorator?.decorator === 'other');
@@ -290,7 +296,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should provide accurate source location information', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testFunctionFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testFunctionFile]);
     
     expect(results.length).toBeGreaterThan(0);
     
@@ -303,7 +310,8 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should handle complex parameter types correctly', () => {
-    const results = extractFunctions(tsConfigFile, testOutputDir, [testArrowFile]);
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
+    const results = extractFunctions(tsConfig, testOutputDir, [testArrowFile]);
     
     const complexArrowFunction = results.find(fn => fn.name === 'complexArrowFunction');
     expect(complexArrowFunction).toBeDefined();
@@ -321,24 +329,26 @@ export const otherArrowFunction = (): Promise<any> => {
   });
 
   it('should throw error when tsconfig.json is not found', () => {
-    const invalidPath = '/nonexistent/path';
+    const invalidPath = '/nonexistent/path/tsconfig.json';
     
     expect(() => {
-      extractFunctions(invalidPath, testOutputDir, [testFunctionFile]);
+      loadTsConfig(invalidPath, testOutputDir);
     }).toThrow('tsconfig.json not found');
   });
 
   it('should throw error when no source file paths are provided', () => {
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
     expect(() => {
-      extractFunctions(tsConfigFile, testOutputDir, []);
+      extractFunctions(tsConfig, testOutputDir, []);
     }).toThrow('Source file paths are not specified');
   });
 
   it('should handle non-existent source files gracefully', () => {
     const nonExistentFile = path.join(testOutputDir, 'nonexistent.ts');
+    const tsConfig = loadTsConfig(tsConfigFile, testOutputDir);
     
     // Should not throw, but should warn and return empty results
-    const results = extractFunctions(tsConfigFile, testOutputDir, [nonExistentFile]);
+    const results = extractFunctions(tsConfig, testOutputDir, [nonExistentFile]);
     expect(results).toBeDefined();
     expect(results).toHaveLength(0);
   });
