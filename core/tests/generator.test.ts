@@ -4,11 +4,15 @@ import { isCamelCase, toPascalCase } from '../src/generator';
 import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import { extractFunctions } from '../src/extractor';
 
 describe('generator function', () => {
-  const testOutputDir = mkdtempSync(join(tmpdir(), 'generator-test-'));
+  let testOutputDir;
+  let tsConfigFile;
   
   beforeEach(() => {
+    testOutputDir = mkdtempSync(join(tmpdir(), 'generator-test-'));
+
     // Clean up test output directory
     if (existsSync(testOutputDir)) {
       rmSync(testOutputDir, { recursive: true, force: true });
@@ -27,19 +31,19 @@ describe('generator function', () => {
     const tsconfig = {
       compilerOptions: {
         target: "ES2020",
-        module: "commonjs",
+        module: "ESNext",
+        moduleResolution: "bundler",
         strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
         declaration: true,
-        outDir: "./dist"
-      },
+        outDir: "./dist",
+        rootDir: "./src"
+        },
       include: ["src/**/*"],
       exclude: ["node_modules", "dist"]
     };
-    
-    writeFileSync(join(baseDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+
+    tsConfigFile = join(baseDir, 'tsconfig.json');
+    writeFileSync(tsConfigFile, JSON.stringify(tsconfig, null, 2));
     
     // Create test files
     files.forEach(file => {
@@ -128,18 +132,13 @@ export class FileService {
         baseDir: testBaseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(testBaseDir, 'src/services/FileService.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, testBaseDir,
+        [
+          join(testBaseDir, 'src/services/FileService.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       // Check that all files are created
       expect(existsSync(mainFile)).toBe(true);
@@ -152,7 +151,7 @@ export class FileService {
       const mainFile = join(testOutputDir, 'main-handlers', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-handlers', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'main-handlers-types.d.ts');
-      
+
       // Create test files
       createTestFiles(baseDir, [
         {
@@ -191,25 +190,14 @@ export function getVersion(): Promise<string> {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          methodName: 'getVersion',
-          namespace: 'systemAPI',
-          parameters: [],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/utils/version.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts'),
+          join(baseDir, 'src/utils/version.ts')
+        ]);
+        
+      await generator.generateFiles(functions);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -289,25 +277,14 @@ export function getVersion(): Promise<string> {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          methodName: 'getVersion',
-          namespace: 'systemAPI',
-          parameters: [],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/utils/version.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts'),
+          join(baseDir, 'src/utils/version.ts')
+        ]);
+        
+      await generator.generateFiles(functions);
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
@@ -383,28 +360,13 @@ export class FileService {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          methodName: 'writeFile',
-          namespace: 'fileAPI',
-          parameters: [
-            { name: 'path', type: 'string' },
-            { name: 'content', type: 'string' }
-          ],
-          returnType: 'Promise<void>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts')
+        ]);
+        
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -463,18 +425,13 @@ export class FileService {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -619,33 +576,15 @@ export class DatabaseService {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          methodName: 'getVersion',
-          namespace: 'systemAPI',
-          parameters: [],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/utils/version.ts')
-        },
-        {
-          className: 'DatabaseService',
-          methodName: 'query',
-          namespace: 'dbAPI',
-          parameters: [{ name: 'sql', type: 'string' }],
-          returnType: 'Promise<any[]>',
-          filePath: join(baseDir, 'src/services/DatabaseService.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts'),
+          join(baseDir, 'src/utils/version.ts'),
+          join(baseDir, 'src/services/DatabaseService.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const preloadContent = readFileSync(preloadFile, 'utf8');
       
@@ -695,26 +634,13 @@ export class FileService {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          className: 'FileService',
-          methodName: 'writeFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
-          returnType: 'Promise<void>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts')
+        ]);
+        
+      await generator.generateFiles(functions);
       
       const mainContent = readFileSync(mainFile, 'utf8');
       
@@ -789,40 +715,15 @@ export function formatDate(date: Date): string {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'FileService',
-          methodName: 'readFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          className: 'FileService',
-          methodName: 'writeFile',
-          namespace: 'fileAPI',
-          parameters: [{ name: 'path', type: 'string' }, { name: 'content', type: 'string' }],
-          returnType: 'Promise<void>',
-          filePath: join(baseDir, 'src/services/FileService.ts')
-        },
-        {
-          methodName: 'getVersion',
-          namespace: 'systemAPI',
-          parameters: [],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/utils/system.ts')
-        },
-        {
-          methodName: 'formatDate',
-          namespace: 'utilsAPI',
-          parameters: [{ name: 'date', type: 'Date' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/utils/format.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/FileService.ts'),
+          join(baseDir, 'src/utils/system.ts'),
+          join(baseDir, 'src/utils/format.ts')
+        ]);
+        
+      await generator.generateFiles(functions);
       
       // Test main handlers
       const mainContent = readFileSync(mainFile, 'utf8');
@@ -1007,36 +908,14 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'UserService',
-          methodName: 'getUser',
-          namespace: 'userAPI',
-          parameters: [{ name: 'id', type: 'number' }],
-          returnType: 'Promise<User>',
-          filePath: join(baseDir, 'src/services/UserService.ts')
-        },
-        {
-          className: 'UserService',
-          methodName: 'createUser',
-          namespace: 'userAPI',
-          parameters: [{ name: 'userData', type: 'CreateUserRequest' }],
-          returnType: 'Promise<User>',
-          filePath: join(baseDir, 'src/services/UserService.ts')
-        },
-        {
-          methodName: 'processOrder',
-          namespace: 'orderAPI',
-          parameters: [
-            { name: 'order', type: 'Order' },
-            { name: 'options', type: 'ProcessOptions' }
-          ],
-          returnType: 'Promise<OrderResult>',
-          filePath: join(baseDir, 'src/utils/orderProcessor.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/UserService.ts'),
+          join(baseDir, 'src/utils/orderProcessor.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1109,36 +988,14 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'TypeScriptService',
-          methodName: 'analyzeFile',
-          namespace: 'tsAPI',
-          parameters: [{ name: 'filePath', type: 'string' }],
-          returnType: 'Promise<SourceFile>',
-          filePath: join(baseDir, 'src/services/TypeScriptService.ts')
-        },
-        {
-          className: 'TypeScriptService',
-          methodName: 'createProgram',
-          namespace: 'tsAPI',
-          parameters: [
-            { name: 'rootNames', type: 'string[]' },
-            { name: 'options', type: 'CompilerOptions' }
-          ],
-          returnType: 'Promise<Program>',
-          filePath: join(baseDir, 'src/services/TypeScriptService.ts')
-        },
-        {
-          methodName: 'getNodeKind',
-          namespace: 'tsAPI',
-          parameters: [{ name: 'node', type: 'Node' }],
-          returnType: 'Promise<SyntaxKind>',
-          filePath: join(baseDir, 'src/utils/nodeUtils.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/TypeScriptService.ts'),
+          join(baseDir, 'src/utils/nodeUtils.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1226,33 +1083,14 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'DataService',
-          methodName: 'getItems',
-          namespace: 'dataAPI',
-          parameters: [{ name: 'filter', type: 'Filter<Item>' }],
-          returnType: 'Promise<Array<Item>>',
-          filePath: join(baseDir, 'src/services/DataService.ts')
-        },
-        {
-          className: 'DataService',
-          methodName: 'getResults',
-          namespace: 'dataAPI',
-          parameters: [{ name: 'query', type: 'string' }],
-          returnType: 'Promise<SearchResult<User | Product>>',
-          filePath: join(baseDir, 'src/services/DataService.ts')
-        },
-        {
-          methodName: 'mapData',
-          namespace: 'utilsAPI',
-          parameters: [{ name: 'input', type: 'Filter<Item>' }],
-          returnType: 'Promise<Item[]>',
-          filePath: join(baseDir, 'src/utils/mapper.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/DataService.ts'),
+          join(baseDir, 'src/utils/mapper.ts')
+        ]);
+
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1319,33 +1157,14 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'BuiltinService',
-          methodName: 'processDate',
-          namespace: 'builtinAPI',
-          parameters: [{ name: 'date', type: 'Date' }],
-          returnType: 'Promise<string>',
-          filePath: join(baseDir, 'src/services/BuiltinService.ts')
-        },
-        {
-          className: 'BuiltinService',
-          methodName: 'processArray',
-          namespace: 'builtinAPI',
-          parameters: [{ name: 'items', type: 'Array<string>' }],
-          returnType: 'Promise<number>',
-          filePath: join(baseDir, 'src/services/BuiltinService.ts')
-        },
-        {
-          methodName: 'processMap',
-          namespace: 'builtinAPI',
-          parameters: [{ name: 'data', type: 'Map<string, number>' }],
-          returnType: 'Promise<Record<string, boolean>>',
-          filePath: join(baseDir, 'src/utils/builtinUtils.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/BuiltinService.ts'),
+          join(baseDir, 'src/utils/builtinUtils.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1427,29 +1246,14 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'MixedService',
-          methodName: 'processUserData',
-          namespace: 'mixedAPI',
-          parameters: [
-            { name: 'user', type: 'User' },
-            { name: 'timestamp', type: 'Date' },
-            { name: 'metadata', type: 'Record<string, UserMetadata>' }
-          ],
-          returnType: 'Promise<ProcessedUser>',
-          filePath: join(baseDir, 'src/services/MixedService.ts')
-        },
-        {
-          methodName: 'validateConfig',
-          namespace: 'mixedAPI',
-          parameters: [{ name: 'config', type: 'AppConfig | string' }],
-          returnType: 'Promise<ValidationResult>',
-          filePath: join(baseDir, 'src/utils/configValidator.ts')
-        }
-      ];
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/MixedService.ts'),
+          join(baseDir, 'src/services/configValidator.ts')
+        ]);
       
-      await generator.generateFiles(methods);
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       
@@ -1570,36 +1374,14 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
         baseDir: baseDir
       });
       
-      const methods = [
-        {
-          className: 'UserService',
-          methodName: 'createUser',
-          namespace: 'userAPI',
-          parameters: [{ name: 'userData', type: 'UserCreateRequest' }],
-          returnType: 'Promise<User>',
-          filePath: join(baseDir, 'src/services/UserService.ts')
-        },
-        {
-          className: 'ProductService',
-          methodName: 'findProduct',
-          namespace: 'productAPI',
-          parameters: [{ name: 'criteria', type: 'ProductSearchCriteria' }],
-          returnType: 'Promise<Product[]>',
-          filePath: join(baseDir, 'src/services/ProductService.ts')
-        },
-        {
-          methodName: 'processOrder',
-          namespace: 'orderAPI',
-          parameters: [
-            { name: 'order', type: 'OrderRequest' },
-            { name: 'payment', type: 'PaymentInfo' }
-          ],
-          returnType: 'Promise<OrderResult>',
-          filePath: join(baseDir, 'src/processors/orderProcessor.ts')
-        }
-      ];
-      
-      await generator.generateFiles(methods);
+      const functions = extractFunctions(
+        tsConfigFile, baseDir,
+        [
+          join(baseDir, 'src/services/UserService.ts'),
+          join(baseDir, 'src/services/ProductService.ts'),
+          join(baseDir, 'src/processors/orderProcessor.ts')
+        ]);
+      await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
       const preloadContent = readFileSync(preloadFile, 'utf8');
