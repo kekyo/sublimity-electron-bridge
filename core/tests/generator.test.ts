@@ -61,6 +61,7 @@ describe('generator function', () => {
   describe('ElectronBridgeGenerator', () => {
     it('should create generator with default options', () => {
       const generator = createElectronBridgeGenerator({
+        baseDir: testOutputDir,
         mainProcessHandlerFile: join(testOutputDir, 'default-main', 'ipc-handlers.ts'),
         preloadHandlerFile: join(testOutputDir, 'default-preload', 'bridge.ts'),
         typeDefinitionsFile: join(testOutputDir, 'default-types.d.ts')
@@ -71,6 +72,7 @@ describe('generator function', () => {
 
     it('should accept custom options', () => {
       const options = {
+        baseDir: testOutputDir,
         mainProcessHandlerFile: 'custom-main/ipc-handlers.ts',
         preloadHandlerFile: 'custom-preload/bridge.ts',
         typeDefinitionsFile: 'custom-types/electron.d.ts',
@@ -125,10 +127,10 @@ export class FileService {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: testBaseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: testBaseDir
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, testBaseDir);
@@ -184,10 +186,10 @@ export function getVersion(): Promise<string> {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -272,10 +274,10 @@ export function getVersion(): Promise<string> {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -353,10 +355,10 @@ export class FileService {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -419,10 +421,10 @@ export class FileService {
       ]);
 
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
 
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -446,7 +448,8 @@ export class FileService {
       const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'empty-types.d.ts');
 
-      const generator = createElectronBridgeGenerator({
+      const generator = createElectronBridgeGenerator({ 
+        baseDir: testOutputDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile
@@ -571,10 +574,10 @@ export class DatabaseService {
       ]);
 
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
 
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -630,10 +633,10 @@ export class FileService {
       ]);
 
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
 
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -712,10 +715,10 @@ export function formatDate(date: Date): string {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -906,10 +909,10 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -987,10 +990,10 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -1083,10 +1086,10 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -1158,10 +1161,10 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -1248,10 +1251,10 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
@@ -1377,10 +1380,10 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
       ]);
       
       const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
-        typeDefinitionsFile: typeDefFile,
-        baseDir: baseDir
+        typeDefinitionsFile: typeDefFile
       });
       
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
