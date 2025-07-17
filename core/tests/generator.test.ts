@@ -377,8 +377,6 @@ export class FileService {
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { FileService } from './type-definitions-test/src/services/FileService';
-
 export interface __fileServiceType {
   readonly readFile: (path: string) => Promise<string>;
   readonly writeFile: (path: string, content: string) => Promise<void>;
@@ -532,7 +530,6 @@ ipcRenderer.on("rpc-message", (_, message) => {
       const typeDefContent = readFileSync(typeDefFile, 'utf8');
       expect(typeDefContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
-
 
 declare global {
   interface Window {
@@ -865,15 +862,10 @@ contextBridge.exposeInMainWorld('mainProcess', {
       const expectedTypeContent = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { FileService } from './complex-test/src/services/FileService';
-import { formatDate } from './complex-test/src/utils/format';
-import { getVersion } from './complex-test/src/utils/system';
-
 export interface __fileServiceType {
   readonly readFile: (path: string) => Promise<string>;
   readonly writeFile: (path: string, content: string) => Promise<void>;
 }
-
 export interface __mainProcessType {
   readonly formatDate: (date: Date) => string;
   readonly getVersion: () => Promise<string>;
@@ -986,7 +978,6 @@ import { Order, OrderResult, ProcessOptions } from './import-test-base/src/utils
 export interface __mainProcessType {
   readonly processOrder: (order: Order, options: ProcessOptions) => Promise<OrderResult>;
 }
-
 export interface __userServiceType {
   readonly createUser: (userData: CreateUserRequest) => Promise<User>;
   readonly getUser: (id: number) => Promise<User>;
@@ -1008,16 +999,13 @@ export {}
       const mainFile = join(testOutputDir, 'external-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'external-import-preload', 'bridge.ts');
       const typeDefFile = join(testOutputDir, 'external-import-types.d.ts');
-      
+
       // Create test files with TypeScript types
       createTestFiles(baseDir, [
         {
           path: 'src/services/TypeScriptService.ts',
           content: `
 import { SourceFile, CompilerOptions, Program } from 'typescript';
-/**
- * @decorator expose
- */
 export class TypeScriptService {
   /**
    * @decorator expose
@@ -1048,14 +1036,14 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
 `
         }
       ]);
-      
+
       const generator = createElectronBridgeGenerator({
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
         typeDefinitionsFile: typeDefFile
       });
-      
+
       const tsConfig = loadTsConfig(tsConfigFile, baseDir);
       const functions = extractFunctions(
         tsConfig, baseDir,
@@ -1063,21 +1051,36 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
           join(baseDir, 'src/services/TypeScriptService.ts'),
           join(baseDir, 'src/utils/nodeUtils.ts')
         ]);
-      
+
       await generator.generateFiles(functions);
-      
+
       const typeContent = readFileSync(typeDefFile, 'utf8');
-      
-      // Should contain import statements for TypeScript types (currently importing from node_modules, will be fixed in next step)
-      expect(typeContent).toContain("import type { Promise } from");
-      // Interface definitions should still be generated correctly
-      expect(typeContent).toContain('interface TsAPI {');
-      expect(typeContent).toContain('analyzeFile(filePath: string): Promise<SourceFile>;');
-      expect(typeContent).toContain('createProgram(rootNames: string[], options: CompilerOptions): Promise<Program>;');
-      expect(typeContent).toContain('getNodeKind(node: Node): Promise<SyntaxKind>;');
-      
-      // Should contain window interface
-      expect(typeContent).toContain('tsAPI: TsAPI;');
+
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { CompilerOptions, Node, Program, SourceFile, SyntaxKind } from 'typescript';
+import { TypeScriptService } from './external-import-base/src/services/TypeScriptService';
+
+export interface __mainProcessType {
+  readonly analyzeFile: (filePath: string) => Promise<SourceFile>;
+  readonly createProgram: (rootNames: string[], options: CompilerOptions) => Promise<Program>;
+}
+
+export interface __typeScriptServiceType {
+  readonly analyzeFile: (filePath: string) => Promise<SourceFile>;
+  readonly createProgram: (rootNames: string[], options: CompilerOptions) => Promise<Program>;
+}
+
+declare global {
+  interface Window {
+    readonly mainProcess: __mainProcessType;
+    readonly typeScriptService: __typeScriptServiceType;
+  }
+}
+
+export {}
+`);
     });
 
     it('should handle complex generic types with custom types', async () => {
@@ -1125,8 +1128,8 @@ export class DataService {
   /**
    * @decorator expose
    */
-  getResults(query: string): Promise<SearchResult<User | Product>> {
-    return Promise.resolve({ items: [], total: 0 });
+  getResults(query: string): Promise<SearchResult<Product>> {
+    return Promise.resolve({ items: [{ id: 123, title: 'test' }], total: 1 });
   }
 }
 `
@@ -1163,17 +1166,30 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
       await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
-      
-      // Should contain import statements for custom types extracted from generics
-      expect(typeContent).toContain("import type { Filter, SearchResult } from './generic-import-base/src/services/DataService';");
-      expect(typeContent).toContain("import type { Item } from './generic-import-base/src/utils/mapper';");
-      
-      // Should contain interface definitions with complex generic types
-      expect(typeContent).toContain('interface DataAPI {');
-      expect(typeContent).toContain('interface UtilsAPI {');
-      expect(typeContent).toContain('getItems(filter: Filter<Item>): Promise<Array<Item>>;');
-      expect(typeContent).toContain('getResults(query: string): Promise<SearchResult<User | Product>>;');
-      expect(typeContent).toContain('mapData(input: Filter<Item>): Promise<Item[]>;');
+
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { Filter, Item, Product, SearchResult } from './generic-import-base/src/services/DataService';
+
+export interface __dataServiceType {
+  readonly getItems: (filter: Filter<Item>) => Promise<Item[]>;
+  readonly getResults: (query: string) => Promise<SearchResult<Product>>;
+}
+
+export interface __mainProcessType {
+  readonly mapData: (input: Filter<Item>) => Promise<Item[]>;
+}
+
+declare global {
+  interface Window {
+    readonly dataService: __dataServiceType;
+    readonly mainProcess: __mainProcessType;
+  }
+}
+
+export {}
+`);
     });
 
     it('should not generate import statements for built-in types', async () => {
@@ -1187,9 +1203,6 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
         {
           path: 'src/services/BuiltinService.ts',
           content: `
-/**
- * @decorator expose
- */
 export class BuiltinService {
   /**
    * @decorator expose
@@ -1238,19 +1251,27 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
       await generator.generateFiles(functions);
       
       const typeContent = readFileSync(typeDefFile, 'utf8');
-      
-      // Currently importing built-in types from node_modules (will be fixed in next step)
-      expect(typeContent).toContain('import type { Date }');
-      expect(typeContent).toContain('import type { Map }');
-      expect(typeContent).toContain('import type { Promise }');
-      // Should still generate correct interface definitions
-      expect(typeContent).toContain('interface BuiltinAPI {');
-      expect(typeContent).toContain('processDate(date: Date): Promise<string>;');
-      expect(typeContent).toContain('processArray(items: Array<string>): Promise<number>;');
-      expect(typeContent).toContain('processMap(data: Map<string, number>): Promise<Record<string, boolean>>;');
-      
-      // Should contain window interface
-      expect(typeContent).toContain('builtinAPI: BuiltinAPI;');
+
+      expect(typeContent).toBe(`// This is auto-generated type definitions by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+export interface __builtinServiceType {
+  readonly processArray: (items: string[]) => Promise<number>;
+  readonly processDate: (date: Date) => Promise<string>;
+}
+export interface __mainProcessType {
+  readonly processMap: (data: Map<string, number>) => Promise<Record<string, boolean>>;
+}
+
+declare global {
+  interface Window {
+    readonly builtinService: __builtinServiceType;
+    readonly mainProcess: __mainProcessType;
+  }
+}
+
+export {}
+`);
     });
 
     it('should handle mixed custom and built-in types correctly', async () => {

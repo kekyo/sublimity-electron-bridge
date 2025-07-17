@@ -39,7 +39,7 @@ export interface SourceCodeFragment {
  * Base interface for type AST
  */
 export interface TypeNode extends SourceCodeFragment {
-  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'generic-parameter' | 'unknown';
+  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'unknown';
   typeString: string;
 }
 
@@ -115,6 +115,15 @@ export interface GenericParameterTypeNode extends TypeNode {
 }
 
 /**
+ * Type alias node
+ */
+export interface TypeAliasNode extends TypeNode {
+  kind: 'type-alias';
+  name: string;
+  typeArguments?: TypeAST[];
+}
+
+/**
  * Unknown type node
  */
 export interface UnknownTypeNode extends TypeNode {
@@ -124,7 +133,7 @@ export interface UnknownTypeNode extends TypeNode {
 /**
  * Type AST
  */
-export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode | UnknownTypeNode;
+export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | TypeAliasNode | FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode | UnknownTypeNode;
 
 /**
  * Function information for AST
@@ -226,14 +235,27 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
 
   // Get source location from the type, or use the parent location if not available
   const currentLocation = getSourceLocation(
+    type.aliasSymbol?.declarations?.at(0) ??
     type.symbol?.declarations?.at(0)) ??
     parentLocation;
-  
+
+  // Handle type alias
+  if (type.aliasSymbol) {
+    const typeArguments = type.aliasTypeArguments?.map(arg => convertTypeToAST(arg, checker, currentLocation, visitedInterfaces));
+    return {
+      kind: 'type-alias',
+      name: typeString,
+      typeArguments,
+      typeString,
+      sourceLocation: currentLocation
+    };
+  }
+
   // Check for Buffer type first (it's a specific global interface)
   if (typeString === 'Buffer' || typeString.startsWith('Buffer<')) {
     return { kind: 'primitive', type: 'buffer', typeString, sourceLocation: currentLocation };
   }
-  
+
   // Determine primitive types
   if (type.flags & ts.TypeFlags.String) {
     return { kind: 'primitive', type: 'string', typeString, sourceLocation: currentLocation };
@@ -334,7 +356,7 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
         const declaration = symbol.declarations[0];
         jsdocDecorator = extractJSDocDecorator(declaration);
       }
-      
+
       const referencedType: InterfaceTypeNode = {
         kind: 'interface',
         name: baseName,
@@ -344,7 +366,7 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
         typeParameters: originalTypeParameters.length > 0 ? originalTypeParameters : undefined,
         jsdocDecorator
       };
-      
+
       return {
         kind: 'type-reference',
         referencedType,

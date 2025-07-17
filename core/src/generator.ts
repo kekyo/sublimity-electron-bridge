@@ -95,8 +95,15 @@ const groupFunctionsByNamespace = (functions: FunctionInfo[], defaultNamespace: 
  */
 const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDir: string | undefined): string | undefined => {
 
-  // Ignore import path if the source file is primitive and/or inside of TypeScript API.
-  if (!node.sourceLocation || node.sourceLocation.packageName === 'typescript') {
+  if (!node.sourceLocation) {
+    return undefined;
+  }
+  // Ignore import path if the source file is primitive and/or inside of TypeScript runtime library types.
+  if (node.sourceLocation.packageName === 'typescript' &&
+    // 'lib.d.ts'
+    // 'lib.es2022.d.ts'
+    // 'lib.foo.bar.d.ts'
+    node.sourceLocation.fileName.match(/lib\.([\w\.])+d\.ts$/)) {
     return undefined;
   }
 
@@ -172,6 +179,17 @@ const traverseAndGetImportPathMaps = (
       }
       break;
     }
+    // Type alias
+    case 'type-alias': {
+      setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
+      // Traverse type arguments when available
+      if (node.typeArguments) {
+        for (const typeArgument of node.typeArguments) {
+          setImportPathMap(typeArgument.typeString, typeArgument, outputDir, baseDir, importPathMap);
+        }
+      }
+      break;
+    }
     // Array
     case 'array': {
       traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, importPathMap);
@@ -232,10 +250,13 @@ interface ImportDescriptor {
  * @param namespaceGroups - The grouped methods
  * @param outputDir - The output directory
  * @param baseDir - Base directory for resolving relative paths
+ * @param includeFunction - Whether to include function names
+ * @param includeDeclaredType - Whether to include declared type names
  * @returns The import descriptor list, sorted to ensure deterministic order
  */
 const getImportDescriptorList = (
-  namespaceGroups: Map<string, FunctionInfo[]>, outputDir: string, baseDir: string | undefined): ImportDescriptor[] => {
+  namespaceGroups: Map<string, FunctionInfo[]>, outputDir: string, baseDir: string | undefined,
+  includeExposedFunction: boolean, includeDeclaredType: boolean): ImportDescriptor[] => {
 
   const importPathMap = new Map<string, Set<string>>();
 
@@ -256,32 +277,41 @@ const getImportDescriptorList = (
           // Add the function name to the import path map
           // `import { functionName } from 'path';`
           case 'function': {
-            memberNames.add(functionInfo.name);
+            if (includeExposedFunction) {
+              memberNames.add(functionInfo.name);
+            }
             break;
           }
           // Add the class name to the import path map
           // `import { ClassName } from 'path';`
           case 'class-method': {
             // traverseAndGetImportPathMaps(functionInfo.declaredType, outputDir, baseDir, importPathMap);
-            memberNames.add(functionInfo.declaredType!.typeString);
+            if (includeDeclaredType) {
+              memberNames.add(functionInfo.declaredType!.typeString);
+            }
             break;
           }
           // Add the function name to the import path map
           // `import { functionName } from 'path';`
           case 'arrow-function':
-            memberNames.add(functionInfo.name);
+            if (includeExposedFunction) {
+              memberNames.add(functionInfo.name);
+            }
             break;
         }
       }
     }
   }
 
-  // Sort import descriptors by path to ensure deterministic order
   return Array.from(importPathMap.entries()).
+    // Filter out import paths that do not have any member names
+    filter(([_, memberNames]) => memberNames.size >= 1).
+    // Sort member names to ensure deterministic order
     map(([path, memberNames]) => ({
       path,
       memberNames: Array.from(memberNames).sort()
     })).
+    // Sort import paths to ensure deterministic order
     sort((a, b) => a.path.localeCompare(b.path));
 }
 
@@ -390,7 +420,8 @@ const generateMainHandlers = (
   baseDir: string | undefined): string => {
 
   // Generate import declarations
-  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
+  const importDescriptors = getImportDescriptorList(
+    namespaceGroups, outputDir, baseDir, true, true);
   const importDeclarations = importDescriptors.map(
     ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
 
@@ -564,7 +595,8 @@ const generateTypeDefinitions = (
   baseDir: string | undefined): string => {
   
   // Generate import declarations
-  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
+  const importDescriptors = getImportDescriptorList(
+    namespaceGroups, outputDir, baseDir, false, false);
   const importDeclarations = importDescriptors.map(
     ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
 
@@ -575,7 +607,7 @@ const generateTypeDefinitions = (
       const params = functionInfo.type.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
       return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.type.returnType.typeString};`;   // Functions in interface
     }).join('\n');
-    return `export interface ${typeName} {\n${functionsCode}\n}\n`;
+    return `export interface ${typeName} {\n${functionsCode}\n}`;
   });
 
   // Generate window properties
@@ -588,8 +620,9 @@ const generateTypeDefinitions = (
     "// Do not edit manually this file.",
     '',
     ...importDeclarations,
-    '',
+    importDeclarations.length >= 1 ? '' : null,
     ...rendererTypeDeclarations,
+    rendererTypeDeclarations.length >= 1 ? '' : null,
     'declare global {',
     '  interface Window {',
     ...windowProperties,
