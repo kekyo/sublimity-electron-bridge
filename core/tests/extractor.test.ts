@@ -306,10 +306,10 @@ export const otherArrowFunction = (): Promise<any> => {
     expect(results.length).toBeGreaterThan(0);
     
     results.forEach(fn => {
-      expect(fn.sourceLocation.fileName).toBe(testFunctionFile);
-      expect(fn.sourceLocation.startLine).toBeGreaterThan(0);
-      expect(fn.sourceLocation.startColumn).toBeGreaterThanOrEqual(0);
-      expect(fn.sourceLocation.endLine).toBeGreaterThanOrEqual(fn.sourceLocation.startLine);
+      expect(fn.sourceLocation?.fileName).toBe(testFunctionFile);
+      expect(fn.sourceLocation?.startLine).toBeGreaterThan(0);
+      expect(fn.sourceLocation?.startColumn).toBeGreaterThanOrEqual(0);
+      expect(fn.sourceLocation?.endLine).toBeGreaterThanOrEqual(fn.sourceLocation?.startLine ?? 0);
     });
   });
 
