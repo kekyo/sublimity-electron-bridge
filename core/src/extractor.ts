@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import * as path from 'path';
+import { resolve } from 'path';
 
 /**
  * Position information within source code
@@ -18,12 +19,26 @@ export interface SourceLocation {
 }
 
 /**
+ * JSDoc decorator
+ */
+export interface JSDocDecorator {
+  decorator: string;
+  args: string[];
+}
+
+/**
+ * Source code fragment
+ */
+export interface SourceCodeFragment {
+  sourceLocation: SourceLocation;
+}
+
+/**
  * Base interface for type AST
  */
-export interface TypeNode {
+export interface TypeNode extends SourceCodeFragment {
   kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'unknown';
   typeString: string;
-  sourceLocation: SourceLocation;
 }
 
 /**
@@ -35,15 +50,24 @@ export interface PrimitiveTypeNode extends TypeNode {
 }
 
 /**
+ * Interface property information
+ */
+export interface PropertyNode {
+  name: string;
+  type: TypeAST;
+  isOptional: boolean;
+}
+
+/**
  * Interface type node
  */
 export interface InterfaceTypeNode extends TypeNode {
   kind: 'interface';
   name: string;
-  properties: InterfaceProperty[];
+  properties: PropertyNode[];
   targetLibrary?: string;
-  nativeTypeName?: string;
-  typeParameters?: TypeNode[];
+  typeParameters?: TypeAST[];
+  jsdocDecorator?: JSDocDecorator;
 }
 
 /**
@@ -51,8 +75,17 @@ export interface InterfaceTypeNode extends TypeNode {
  */
 export interface TypeReferenceTypeNode extends TypeNode {
   kind: 'type-reference';
-  referencedType: TypeNode;
-  typeArguments?: TypeNode[];
+  referencedType: TypeAST;
+  typeArguments?: TypeAST[];
+}
+
+/**
+ * Function parameter information
+ */
+export interface FunctionParameterNode {
+  name: string;
+  type: TypeAST;
+  isRestParameter: boolean;
 }
 
 /**
@@ -60,8 +93,8 @@ export interface TypeReferenceTypeNode extends TypeNode {
  */
 export interface FunctionTypeNode extends TypeNode {
   kind: 'function';
-  parameters: FunctionParameter[];
-  returnType: TypeNode;
+  parameters: FunctionParameterNode[];
+  returnType: TypeAST;
 }
 
 /**
@@ -69,7 +102,7 @@ export interface FunctionTypeNode extends TypeNode {
  */
 export interface ArrayTypeNode extends TypeNode {
   kind: 'array';
-  elementType: TypeNode;
+  elementType: TypeAST;
 }
 
 /**
@@ -85,22 +118,18 @@ export interface UnknownTypeNode extends TypeNode {
 export type TypeAST = PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | FunctionTypeNode | ArrayTypeNode | UnknownTypeNode;
 
 /**
- * Function parameter information
+ * Function information for AST
  */
-export interface FunctionParameter {
+export interface FunctionInfo extends SourceCodeFragment {
+  kind: 'class-method' | 'function' | 'arrow-function';
   name: string;
-  type: TypeAST;
-  isRestParameter: boolean;
+  declaredType?: TypeAST;
+  parameters: FunctionParameterNode[];
+  returnType: TypeAST;
+  jsdocDecorator?: JSDocDecorator;
 }
 
-/**
- * Interface property information
- */
-export interface InterfaceProperty {
-  name: string;
-  type: TypeAST;
-  isOptional: boolean;
-}
+///////////////////////////////////////////////////////////////////////////
 
 /**
  * Extract position information from TypeScript Node
@@ -265,16 +294,10 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, currentSourceF
       
       // Create the referenced interface type (may have type parameters if it's a generic interface)
       // Also extract nativeTypeName if available
-      let nativeTypeName: string | undefined = undefined;
-      let targetLibrary: string | undefined = undefined;
-      
+      let jsdocDecorator: JSDocDecorator | undefined;
       if (symbol && symbol.declarations && symbol.declarations.length > 0) {
         const declaration = symbol.declarations[0];
-        const decoratorInfo = extractJSDocDecorator(declaration);
-        if (decoratorInfo) {
-          nativeTypeName = decoratorInfo.nativeTypeName;
-          targetLibrary = decoratorInfo.targetLibrary;
-        }
+        jsdocDecorator = extractJSDocDecorator(declaration);
       }
       
       const referencedType: InterfaceTypeNode = {
@@ -284,8 +307,7 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, currentSourceF
         typeString: referencedTypeString,
         sourceLocation: referencedTypeSourceLocation,
         typeParameters: originalTypeParameters.length > 0 ? originalTypeParameters : undefined,
-        nativeTypeName,
-        targetLibrary
+        jsdocDecorator
       };
       
       return {
@@ -378,11 +400,11 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, currentSourceF
 };
 
 /**
- * Extract decorator value from JSDoc comment (for function methods)
+ * Extract decorator value from JSDoc comment
  * @param node TypeScript Node
  * @returns {decorator: string, argument?: string} object (undefined if not found)
  */
-const extractJSDocDecoratorForFunction = (node: ts.Node): {decorator: string, argument?: string} | undefined => {
+const extractJSDocDecorator = (node: ts.Node): JSDocDecorator | undefined => {
   // Get JSDoc comment
   const jsDocTags = ts.getJSDocTags(node);
   
@@ -392,11 +414,15 @@ const extractJSDocDecoratorForFunction = (node: ts.Node): {decorator: string, ar
       if (tag.comment) {
         const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text).join('');
         // Get parameters separated by whitespace
-        const params = comment.trim().split(/\s+/).filter(param => param.length > 0);
+        const params = comment.
+          trim().
+          split(/\s+/).
+          map(param => param.trim()).
+          filter(param => param.length > 0);
         if (params.length > 0) {
           const decorator = params[0];
-          const argument = params.length > 1 ? params.slice(1).join(' ') : undefined;
-          return { decorator, argument };
+          const args = params.slice(1);
+          return { decorator, args };
         }
       }
     }
@@ -406,70 +432,18 @@ const extractJSDocDecoratorForFunction = (node: ts.Node): {decorator: string, ar
 };
 
 /**
- * Extract decorator value from JSDoc comment (for interfaces)
- * @param node TypeScript Node
- * @returns {decorator: string, targetLibrary?: string, nativeTypeName?: string} object (null if not found)
- */
-const extractJSDocDecorator = (node: ts.Node): {decorator: string, targetLibrary?: string, nativeTypeName?: string} | null => {
-  // Get JSDoc comment
-  const jsDocTags = ts.getJSDocTags(node);
-  
-  for (const tag of jsDocTags) {
-    if (tag.tagName.escapedText === 'decorator') {
-      // Get @decorator tag value
-      if (tag.comment) {
-        const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text).join('');
-        // Get parameters separated by whitespace
-        const params = comment.trim().split(/\s+/).filter(param => param.length > 0);
-        if (params.length > 0) {
-          const decorator = params[0];
-          
-          if (decorator === 'native-type') {
-            // Handle @decorator native-type [typename] format
-            const nativeTypeName = params.length > 1 ? params[1] : undefined;
-            return { decorator, nativeTypeName };
-          } else {
-            // Handle existing format @decorator xxx yyy
-            const targetLibrary = params.length > 1 ? params[1] : undefined;
-            return { decorator, targetLibrary };
-          }
-        }
-      }
-    }
-  }
-  
-  return null;
-};
-
-/**
- * Extract interface definitions from source code at specified paths
- * @param tsConfigPath Path to tsconfig.json
+ * Extract functions from source code at specified paths
+ * @param tsConfig tsconfig.json object
+ * @param baseDir Base directory for resolving relative paths
  * @param sourceFilePaths Array of source code paths
- * @param targetDecorator Target decorator name (required)
- * @returns Array of extracted interface information (flattened from all files)
+ * @returns Array of extracted function information with complete AST data
  */
-export const extractInterfaces = (tsConfigPath: string, sourceFilePaths: string[], targetDecorator: string): InterfaceTypeNode[] => {
-  // Input validation
-  if (!sourceFilePaths || sourceFilePaths.length === 0) {
-    throw new Error('Source file paths are not specified');
-  }
-
-  if (!targetDecorator || targetDecorator.trim().length === 0) {
-    throw new Error('targetDecorator is not specified');
-  }
-
-  // Find tsconfig.json path
-  const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
-  if (!configPath) {
-    throw new Error("tsconfig.json not found");
-  }
-
-  // Read and parse tsconfig.json
-  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
+  // Parse tsconfig
   const parsedConfig = ts.parseJsonConfigFileContent(
-    configFile.config,
+    tsConfig,
     ts.sys,
-    path.dirname(configPath)
+    baseDir
   );
 
   // Generate Program for entire project (including all files)
@@ -480,126 +454,7 @@ export const extractInterfaces = (tsConfigPath: string, sourceFilePaths: string[
   });
 
   const checker = program.getTypeChecker();
-  const result: InterfaceTypeNode[] = [];
-
-  // Process each file
-  for (const sourceFilePath of sourceFilePaths) {
-    const sourceFile = program.getSourceFile(sourceFilePath);
-    if (!sourceFile) {
-      console.warn(`File not found: ${sourceFilePath}`);
-      continue;
-    }
-
-    // Get all interface declarations in the file
-    const interfaceDeclarations = sourceFile.statements.filter(
-      (statement) => ts.isInterfaceDeclaration(statement)
-    ) as ts.InterfaceDeclaration[];
-
-    // Process each interface
-    for (const interfaceDeclaration of interfaceDeclarations) {
-      // Decorator filtering (required)
-      const decoratorInfo = extractJSDocDecorator(interfaceDeclaration);
-      if (!decoratorInfo || decoratorInfo.decorator !== targetDecorator) {
-        continue; // Skip if conditions are not met
-      }
-
-      // Handle native-type decorator
-      if (decoratorInfo.decorator === 'native-type') {
-        try {
-          // AST conversion only when conditions are met (heavy processing)
-          const type = checker.getTypeAtLocation(interfaceDeclaration);
-          const interfaceAST = convertTypeToAST(type, checker, sourceFilePath) as InterfaceTypeNode;
-          
-          // Set nativeTypeName (use provided name or interface name as fallback)
-          interfaceAST.nativeTypeName = decoratorInfo.nativeTypeName || interfaceAST.name;
-          
-          result.push(interfaceAST);
-        } catch (error) {
-          console.warn(`Interface processing error: ${interfaceDeclaration.name?.getText()}`, error);
-          continue;
-        }
-      } else {
-        // Handle existing decorator format
-        // targetLibrary is required
-        if (!decoratorInfo.targetLibrary) {
-          const interfaceName = interfaceDeclaration.name?.getText() || 'Unknown';
-          throw new Error(`Interface '${interfaceName}' with @decorator ${targetDecorator} does not specify targetLibrary`);
-        }
-
-        try {
-          // AST conversion only when conditions are met (heavy processing)
-          const type = checker.getTypeAtLocation(interfaceDeclaration);
-          const interfaceAST = convertTypeToAST(type, checker, sourceFilePath) as InterfaceTypeNode;
-          
-          // Set targetLibrary
-          interfaceAST.targetLibrary = decoratorInfo.targetLibrary;
-          
-          result.push(interfaceAST);
-        } catch (error) {
-          console.warn(`Interface processing error: ${interfaceDeclaration.name?.getText()}`, error);
-          continue;
-        }
-      }
-    }
-  }
-
-  // Validate result
-  if (result.length === 0) {
-    throw new Error(`No interfaces found with decorator '@decorator ${targetDecorator}'`);
-  }
-
-  return result;
-};
-
-/**
- * Function method information for AST
- */
-export interface FunctionMethodInfo {
-  kind: 'class-method' | 'function' | 'arrow-function';
-  name: string;
-  className?: string;
-  parameters: FunctionParameter[];
-  returnType: TypeAST;
-  decoratorInfo?: {decorator: string, argument?: string};
-  sourceLocation: SourceLocation;
-  filePath: string;
-}
-
-/**
- * Extract function methods from source code at specified paths
- * @param tsConfigPath Path to tsconfig.json
- * @param sourceFilePaths Array of source code paths
- * @returns Array of extracted function method information with complete AST data
- */
-export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: string[]): FunctionMethodInfo[] => {
-  // Input validation
-  if (!sourceFilePaths || sourceFilePaths.length === 0) {
-    throw new Error('Source file paths are not specified');
-  }
-
-  // Find tsconfig.json path
-  const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
-  if (!configPath) {
-    throw new Error("tsconfig.json not found");
-  }
-
-  // Read and parse tsconfig.json
-  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
-  const parsedConfig = ts.parseJsonConfigFileContent(
-    configFile.config,
-    ts.sys,
-    path.dirname(configPath)
-  );
-
-  // Generate Program for entire project (including all files)
-  const allFiles = [...new Set([...parsedConfig.fileNames, ...sourceFilePaths])];
-  const program = ts.createProgram({
-    rootNames: allFiles,
-    options: parsedConfig.options,
-  });
-
-  const checker = program.getTypeChecker();
-  const result: FunctionMethodInfo[] = [];
+  const result: FunctionInfo[] = [];
 
   // Process each file
   for (const sourceFilePath of sourceFilePaths) {
@@ -613,12 +468,12 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
     const visit = (node: ts.Node): void => {
       // Handle class methods
       if (ts.isClassDeclaration(node) && node.name) {
-        const className = node.name.text;
+        const declaredType = convertTypeToAST(checker.getTypeAtLocation(node), checker, sourceFilePath);
         
         node.members.forEach(member => {
           if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
             const methodName = member.name.text;
-            const decoratorInfo = extractJSDocDecoratorForFunction(member);
+            const jsdocDecorator = extractJSDocDecorator(member);
             
             // Extract parameter types using AST
             const parameters = member.parameters.map(param => {
@@ -630,31 +485,30 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
                 isRestParameter
               };
             });
-            
+
             // Extract return type using AST
             const returnType = member.type ? 
               convertTypeToAST(checker.getTypeAtLocation(member.type), checker, sourceFilePath) :
               convertTypeToAST(checker.getReturnTypeOfSignature(checker.getSignatureFromDeclaration(member)!), checker, sourceFilePath);
-            
+
             result.push({
               kind: 'class-method',
               name: methodName,
-              className,
+              declaredType: declaredType,
               parameters,
               returnType,
-              decoratorInfo,
-              sourceLocation: getSourceLocation(member, sourceFilePath),
-              filePath: sourceFilePath
+              jsdocDecorator,
+              sourceLocation: getSourceLocation(member, sourceFilePath)
             });
           }
         });
       }
-      
+
       // Handle function declarations
       if (ts.isFunctionDeclaration(node) && node.name) {
         const functionName = node.name.text;
-        const decoratorInfo = extractJSDocDecoratorForFunction(node);
-        
+        const jsdocDecorator = extractJSDocDecorator(node);
+
         // Extract parameter types using AST
         const parameters = node.parameters.map(param => {
           const paramType = checker.getTypeAtLocation(param);
@@ -665,23 +519,22 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
             isRestParameter
           };
         });
-        
+
         // Extract return type using AST
         const returnType = node.type ? 
           convertTypeToAST(checker.getTypeAtLocation(node.type), checker, sourceFilePath) :
           convertTypeToAST(checker.getReturnTypeOfSignature(checker.getSignatureFromDeclaration(node)!), checker, sourceFilePath);
-        
+
         result.push({
           kind: 'function',
           name: functionName,
           parameters,
           returnType,
-          decoratorInfo,
-          sourceLocation: getSourceLocation(node, sourceFilePath),
-          filePath: sourceFilePath
+          jsdocDecorator,
+          sourceLocation: getSourceLocation(node, sourceFilePath)
         });
       }
-      
+
       // Handle variable declarations with arrow functions
       if (ts.isVariableStatement(node)) {
         node.declarationList.declarations.forEach(declaration => {
@@ -690,7 +543,7 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
               declaration.initializer && ts.isArrowFunction(declaration.initializer)) {
             
             const functionName = declaration.name.text;
-            const decoratorInfo = extractJSDocDecoratorForFunction(node);
+            const jsdocDecorator = extractJSDocDecorator(node);
             const arrowFunc = declaration.initializer;
             
             // Extract parameter types using AST
@@ -703,7 +556,7 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
                 isRestParameter
               };
             });
-            
+
             // Extract return type using AST
             const returnType = arrowFunc.type ? 
               convertTypeToAST(checker.getTypeAtLocation(arrowFunc.type), checker, sourceFilePath) :
@@ -714,14 +567,13 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
               name: functionName,
               parameters,
               returnType,
-              decoratorInfo,
-              sourceLocation: getSourceLocation(declaration, sourceFilePath),
-              filePath: sourceFilePath
+              jsdocDecorator,
+              sourceLocation: getSourceLocation(declaration, sourceFilePath)
             });
           }
         });
       }
-      
+
       ts.forEachChild(node, visit);
     };
 
@@ -729,4 +581,25 @@ export const extractFunctionMethods = (tsConfigPath: string, sourceFilePaths: st
   }
 
   return result;
+};
+
+/**
+ * Load the TypeScript configuration object from a file or from an object
+ * @param tsConfigPath Path to the tsconfig.json file
+ * @returns TypeScript configuration object
+ */
+export const loadTsConfig = (tsConfig: string | any, baseDir: string): any => {
+  if (typeof tsConfig === 'string') {
+    const tsConfigPath = resolve(baseDir, tsConfig);
+    const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
+    if (!configPath) {
+      throw new Error(`tsconfig.json not found in ${tsConfigPath}`);
+    }
+    const configFile = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
+    if (!configFile.config) {
+      throw new Error(`Failed to load TypeScript configuration from ${tsConfigPath}: ${configFile.error}`);
+    }
+    return configFile.config;
+  }
+  return tsConfig;
 };

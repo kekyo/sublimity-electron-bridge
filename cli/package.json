@@ -22,16 +22,16 @@
     "test": "rv --npm . && npm i && tsc --noEmit && vitest run"
   },
   "peerDependencies": {
-    "commander": "^11.1.0",
+    "commander": ">=11.1.0",
     "sublimity-electron-bridge-core": "file:../core",
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.10",
-    "@vitest/ui": "^3.2.4",
-    "screw-up": "^0.8.1",
-    "typescript": "^5.8.3",
-    "vite": "^7.0.2",
-    "vitest": "^3.2.4"
+    "@types/node": ">=24.0.10",
+    "@vitest/ui": ">=3.2.4",
+    "screw-up": ">=0.8.1",
+    "typescript": ">=5.8.3",
+    "vite": ">=7.0.2",
+    "vitest": ">=3.2.4"
   }
 }

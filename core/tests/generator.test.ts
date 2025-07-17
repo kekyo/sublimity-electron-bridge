@@ -5,14 +5,15 @@ import { rmSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 
-describe('ElectronBridgeCore', () => {
-  const testOutputDir = mkdtempSync(join(tmpdir(), 'cli-test-'));
+describe('generator function', () => {
+  const testOutputDir = mkdtempSync(join(tmpdir(), 'generator-test-'));
   
   beforeEach(() => {
     // Clean up test output directory
     if (existsSync(testOutputDir)) {
       rmSync(testOutputDir, { recursive: true, force: true });
     }
+    mkdirSync(testOutputDir, { recursive: true });
   });
 
   // Helper function to create test files
@@ -93,16 +94,7 @@ describe('ElectronBridgeCore', () => {
     });
   });
 
-
-
   describe('generateFiles', () => {
-    beforeEach(() => {
-      // Ensure test output directory exists
-      if (!existsSync(testOutputDir)) {
-        mkdirSync(testOutputDir, { recursive: true });
-      }
-    });
-
     it('should generate all three output files', async () => {
       const testBaseDir = join(testOutputDir, 'test-base');
       const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');

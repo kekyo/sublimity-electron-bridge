@@ -1,8 +1,11 @@
-import * as ts from 'typescript';
 import { resolve, dirname, relative } from 'path';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import { ElectronBridgeOptions, ElectronBridgeGenerator, ExposedMethod } from './types';
+import { ElectronBridgeOptions, ElectronBridgeGenerator } from './types';
+import { extractFunctions, FunctionInfo, loadTsConfig, SourceCodeFragment, TypeAST } from './extractor';
+import { createConsoleLogger } from '.';
+import ts from 'typescript';
+
 /**
  * Check if a string is camelCase
  * @param str - The string to check
@@ -20,26 +23,31 @@ export const isCamelCase = (str: string): boolean => {
 export const toPascalCase = (str: string): string => {
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
-import { extractFunctionMethods, FunctionMethodInfo } from './extractor';
-import { createConsoleLogger } from '.';
+
+/////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Calculate proper import path from TypeScript API file paths
- * @param sourceFilePath - File path from TypeScript API (may be relative or absolute)
+ * @param node - The node to calculate the import path for
  * @param outputDir - Output directory absolute path
  * @param baseDir - Base directory for resolving relative paths (optional)
  * @returns Proper relative import path
  */
-const calculateImportPath = (sourceFilePath: string, outputDir: string, baseDir?: string): string => {
+const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDir: string | undefined): string | undefined => {
+
+  // TODO: Ignore import path if the source file is primitive and/or inside of TypeScript API.
+  // "What the types for implicitly imported types?"
+  // Maybe: node_modules/typescript/lib/lib.*.d.ts ?
+
   let absoluteSourcePath: string;
   
   // Handle relative vs absolute paths
-  if (baseDir && !path.isAbsolute(sourceFilePath)) {
+  if (baseDir && !path.isAbsolute(node.sourceLocation.fileName)) {
     // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
-    absoluteSourcePath = resolve(baseDir, sourceFilePath);
+    absoluteSourcePath = resolve(baseDir, node.sourceLocation.fileName);
   } else {
     // Otherwise, resolve it as is
-    absoluteSourcePath = resolve(sourceFilePath);
+    absoluteSourcePath = resolve(node.sourceLocation.fileName);
   }
   
   const normalizedOutputDir = resolve(outputDir);
@@ -62,86 +70,54 @@ const calculateImportPath = (sourceFilePath: string, outputDir: string, baseDir?
 };
 
 /**
- * Convert FunctionMethodInfo to ExposedMethod
- * @param functionInfo - The function method info from extractor
- * @param defaultNamespace - The default namespace to use
- * @returns ExposedMethod or undefined if not an exposed method
- */
-const convertToExposedMethod = (functionInfo: FunctionMethodInfo, defaultNamespace: string): ExposedMethod | undefined => {
-  // Check if this function has an 'expose' decorator
-  if (!functionInfo.decoratorInfo || functionInfo.decoratorInfo.decorator !== 'expose') {
-    return undefined;
-  }
-  
-  // Parse the namespace from the decorator argument
-  const argument = functionInfo.decoratorInfo.argument;
-  let namespace = defaultNamespace;
-  
-  if (argument) {
-    // For now, treat the entire argument as the namespace
-    // In the future, this could be enhanced to parse more complex arguments
-    namespace = argument.trim();
-  }
-  
-  // Convert parameters to ExposedMethod format
-  const parameters = functionInfo.parameters.map(param => ({
-    name: param.name,
-    type: param.type.typeString
-  }));
-  
-  return {
-    className: functionInfo.className,
-    methodName: functionInfo.name,
-    namespace,
-    parameters,
-    returnType: functionInfo.returnType.typeString,
-    filePath: functionInfo.filePath
-  };
-};
-
-/**
- * Extract exposed methods using the new extractor
- * @param tsConfigPath - Path to tsconfig.json
+ * Extract exposed functions using the new extractor
+ * @param tsConfig - tsconfig.json object
+ * @param baseDir - Base directory for resolving relative paths
  * @param sourceFilePaths - Array of source file paths
  * @param defaultNamespace - Default namespace
- * @returns Array of ExposedMethod
+ * @returns Array of ExposedFunction
  */
-const extractExposedMethodsFromExtractor = (tsConfigPath: string, sourceFilePaths: string[], defaultNamespace: string): ExposedMethod[] => {
-  const functionMethods = extractFunctionMethods(tsConfigPath, sourceFilePaths);
-  const exposedMethods: ExposedMethod[] = [];
-  
-  for (const functionMethod of functionMethods) {
-    const exposedMethod = convertToExposedMethod(functionMethod, defaultNamespace);
-    if (exposedMethod) {
-      exposedMethods.push(exposedMethod);
-    }
-  }
-  
-  return exposedMethods;
+const extractExposedFunctionsFromExtractor = (
+  tsConfig: any, baseDir: string, sourceFilePaths: string[], defaultNamespace: string): FunctionInfo[] => {
+  const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
+  return functionInfos.
+    filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
 };
 
 /**
- * Group methods by namespace
- * @param methods - The methods to group
- * @returns The grouped methods
- * @remarks This function groups methods by their namespace. It is made to ensure deterministic order of the methods.
+ * Get the Electron IPC namespace from the function info
+ * @param functionInfo - The function info
+ * @param defaultNamespace - The default namespace
+ * @returns The Electron IPC namespace
  */
-const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedMethod[]> => {
-  const groups = new Map<string, ExposedMethod[]>();
+const getIpcNamespace = (functionInfo: FunctionInfo, defaultNamespace: string): string => {
+  return functionInfo.jsdocDecorator!.args.length >= 1 ? functionInfo.jsdocDecorator!.args[0] : defaultNamespace;
+};
 
-  // Group methods by namespace
-  for (const method of methods) {
-    let methods = groups.get(method.namespace);
-    if (!methods) {
-      methods = [];
-      groups.set(method.namespace, methods);
+/**
+ * Group and sortfunctions by namespace
+ * @param functions - The functions to group
+ * @param defaultNamespace - The default namespace
+ * @returns The grouped functions
+ * @remarks This function groups functions by their namespace. It is made to ensure deterministic order of the functions.
+ */
+const groupFunctionsByNamespace = (functions: FunctionInfo[], defaultNamespace: string): Map<string, FunctionInfo[]> => {
+  const groups = new Map<string, FunctionInfo[]>();
+
+  // Group functions by ElectronIPC namespace
+  for (const func of functions) {
+    const ipcNamespace = getIpcNamespace(func, defaultNamespace);
+    let functions = groups.get(ipcNamespace);
+    if (!functions) {
+      functions = [];
+      groups.set(ipcNamespace, functions);
     }
-    methods.push(method);
+    functions.push(func);
   }
 
-  // Sort methods by name to ensure deterministic order
-  for (const methods of groups.values()) {
-    methods.sort((a, b) => a.methodName.localeCompare(b.methodName));
+  // Sort functions by name to ensure deterministic order
+  for (const functions of groups.values()) {
+    functions.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Sort groups by name to ensure deterministic order
@@ -151,61 +127,173 @@ const groupMethodsByNamespace = (methods: ExposedMethod[]): Map<string, ExposedM
 /////////////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * Import descriptor
+ * @remarks This is a descriptor for a single import statement.
+ */
+interface ImportDescriptor {
+  /**
+   * The path to the import
+   */
+  readonly path: string;
+  /**
+   * The member names to import
+   */
+  readonly memberNames: string[];
+}
+
+/**
+ * Get the import descriptor list for the given namespace groups
+ * @param namespaceGroups - The grouped methods
+ * @param outputDir - The output directory
+ * @param baseDir - Base directory for resolving relative paths
+ * @returns The import descriptor list, sorted to ensure deterministic order
+ */
+const getImportDescriptorList = (
+  namespaceGroups: Map<string, FunctionInfo[]>, outputDir: string, baseDir: string | undefined): ImportDescriptor[] => {
+
+  const importPathMap = new Map<string, Set<string>>();
+
+  for (const functions of namespaceGroups.values()) {
+    for (const functionInfo of functions) {
+      const path = calculateImportPath(functionInfo, outputDir, baseDir);
+      if (path) {
+        let memberNames = importPathMap.get(path);
+        if (!memberNames) {
+          memberNames = new Set<string>();
+          importPathMap.set(path, memberNames);
+        }
+        memberNames.add(functionInfo.name);
+      }
+    }
+  }
+
+  // Sort import descriptors by path to ensure deterministic order
+  return Array.from(importPathMap.entries()).
+    map(([path, memberNames]) => ({
+      path,
+      memberNames: Array.from(memberNames).sort()
+    })).
+    sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/**
+ * Singleton instance descriptor
+ * @remarks This is a descriptor for a single singleton instance.
+ */
+interface SingletonInstanceDescriptor {
+  /**
+   * The type name
+   */
+  readonly typeName: string;
+  /**
+   * The instance name
+   */
+  readonly instanceName: string;
+}
+
+/**
+ * Get the singleton instance names for the given namespace groups
+ * @param namespaceGroups - The grouped methods
+ * @returns The singleton instance names, sorted to ensure deterministic order
+ */
+const getSingletonInstanceDescriptorList = (namespaceGroups: Map<string, FunctionInfo[]>): SingletonInstanceDescriptor[] => {
+  const singletonInstanceNames = new Map<string, string>();
+
+  for (const functions of namespaceGroups.values()) {
+    for (const functionInfo of functions) {
+      const declaredType = functionInfo.declaredType;
+      if (declaredType) {
+        // When the function is declared with a type, we need to create a singleton instance
+        const singletonInstanceName = `${declaredType.typeString}Instance`;
+        singletonInstanceNames.set(declaredType.typeString, singletonInstanceName);
+      }
+    }
+  }
+
+  // Sort singleton instance names to ensure deterministic order
+  return Array.from(singletonInstanceNames.entries()).
+    map(([typeName, singletonInstanceName]) => ({
+      typeName,
+      instanceName: singletonInstanceName
+    })).
+    sort((a, b) => a.typeName.localeCompare(b.typeName));
+};
+
+/**
+ * Registration descriptor
+ * @remarks This is a descriptor for a single registration.
+ */
+interface RegistrationDescriptor {
+  /**
+   * The function ID
+   */
+  readonly functionId: string;
+  /**
+   * The function name
+   * @remarks This is the name of the function to register. Dot-separated member name when the function is declared with a type.
+   */
+  readonly functionName: string;
+}
+
+/**
+ * Get the registration descriptor list for the given namespace groups
+ * @param namespaceGroups - The grouped methods
+ * @returns The registration descriptor list, sorted to ensure deterministic order
+ */
+const getRegistrationDescriptorList = (namespaceGroups: Map<string, FunctionInfo[]>): RegistrationDescriptor[] => {
+  const registrationDescriptors: RegistrationDescriptor[] = [];
+
+  for (const [ipcNamespace, functions] of namespaceGroups.entries()) {
+    for (const functionInfo of functions) {
+      const declaredType = functionInfo.declaredType;
+      if (declaredType) {
+        // When the function is declared with a type, we need to register the function as a member of the singleton instance
+        const singletonInstanceName = `${declaredType.typeString}Instance`;
+        registrationDescriptors.push({
+          functionId: `${ipcNamespace}:${functionInfo.name}`,
+          functionName: `${singletonInstanceName}.${functionInfo.name}`
+        });
+      } else {
+        // When the function is not declared with a type, we need to register the function as a standalone function
+        registrationDescriptors.push({
+          functionId: `${ipcNamespace}:${functionInfo.name}`,
+          functionName: functionInfo.name
+        });
+      }
+    }
+  }
+
+  // Sort registration descriptors to ensure deterministic order
+  return registrationDescriptors.sort((a, b) => a.functionId.localeCompare(b.functionId));
+};
+
+/**
  * Generate the main handlers
  * @param namespaceGroups - The grouped methods
  * @param outputDir - The output directory
- * @param channelPrefix - Channel prefix
  * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the main handlers for the exposed methods.
  */
-const generateMainHandlers = async (
-  namespaceGroups: Map<string, ExposedMethod[]>,
+const generateMainHandlers = (
+  namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  channelPrefix: string,
-  baseDir?: string): Promise<string> => {
+  baseDir?: string): string => {
 
-  const imports = new Set<string>();
-  const singletonInstances = new Set<string>();
-  const registrations: string[] = [];
-  
-  // Generate imports and collect unique class names
-  for (const methods of namespaceGroups.values()) {
-    for (const method of methods) {
-      if (method.className) {
-        const importPath = calculateImportPath(method.filePath, outputDir, baseDir);
-        imports.add(`import { ${method.className} } from '${importPath}';`);
-        singletonInstances.add(method.className);
-      }
-    }
-  }
+  // Generate import declarations
+  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
+  const importDeclarations = importDescriptors.map(
+    ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
 
   // Generate singleton instance declarations
-  const instanceDeclarations: string[] = [];
-  for (const className of Array.from(singletonInstances).sort()) {
-    const instanceVar = `${className.toLowerCase()}Instance`;
-    instanceDeclarations.push(`const ${instanceVar} = new ${className}();`);
-  }
+  const singletonInstanceDescriptors = getSingletonInstanceDescriptorList(namespaceGroups);
+  const signletonInstanceDeclarations = singletonInstanceDescriptors.map(
+    ({ typeName, instanceName }) => `const ${instanceName} = new ${typeName}();`);
 
-  for (const [namespace, methods] of namespaceGroups.entries()) {
-    for (const method of methods) {
-      if (method.className) {
-        const instanceVar = `${method.className.toLowerCase()}Instance`;
-        const functionId = `${namespace}:${method.methodName}`;
-        const params = method.parameters.map(p => p.name).join(', ');
-
-        registrations.push(`controller.register('${functionId}', (${params}) => ${instanceVar}.${method.methodName}(${params}));`);
-      } else {
-        // Standalone function
-        const functionId = `${namespace}:${method.methodName}`;
-        const params = method.parameters.map(p => p.name).join(', ');
-
-        const importPath = calculateImportPath(method.filePath, outputDir, baseDir);
-        imports.add(`import { ${method.methodName} } from '${importPath}';`);
-        registrations.push(`controller.register('${functionId}', (${params}) => ${method.methodName}(${params}));`);
-      }
-    }
-  }
+  // Generate registrations
+  const registrationDescriptors = getRegistrationDescriptorList(namespaceGroups); 
+  const registrations = registrationDescriptors.map(
+    ({ functionId, functionName }) => `controller.register('${functionId}', ${functionName});`);
 
   return [
     "// This is auto-generated main process handler by sublimity-electron-bridge.",
@@ -213,10 +301,10 @@ const generateMainHandlers = async (
     '',
     "import { ipcMain } from 'electron';",
     "import { createSublimityRpcController } from 'sublimity-rpc';",
-    ...Array.from(imports).sort(),
+    ...importDeclarations,
     '',
     '// Create singleton instances',
-    ...instanceDeclarations,
+    ...signletonInstanceDeclarations,
     '',
     '// Create RPC controller',
     'const controller = createSublimityRpcController({',
@@ -237,6 +325,36 @@ const generateMainHandlers = async (
   ].join('\n');
 };
 
+/////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Preload bridge descriptor
+ * @remarks This is a descriptor for a single preload bridge.
+ */
+interface PreloadBridgeDescriptor {
+  /**
+   * Electron IPC namespace
+   */
+  readonly ipcNamespace: string;
+  /**
+   * The functions
+   */
+  readonly functions: FunctionInfo[];
+}
+
+/**
+ * Get the preload bridge descriptor list for the given namespace groups
+ * @param namespaceGroups - The grouped methods
+ * @returns The preload bridge descriptor list, sorted to ensure deterministic order
+ */
+const getPreloadBridgeDescriptorList = (namespaceGroups: Map<string, FunctionInfo[]>): PreloadBridgeDescriptor[] => {
+  return Array.from(namespaceGroups.entries()).map(([ipcNamespace, functions]) => ({
+    ipcNamespace,
+    functions: functions.sort((a, b) => a.name.localeCompare(b.name))
+  })).
+  sort((a, b) => a.ipcNamespace.localeCompare(b.ipcNamespace));
+};
+
 /**
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
@@ -246,37 +364,36 @@ const generateMainHandlers = async (
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
-const generatePreloadBridge = async (
-  namespaceGroups: Map<string, ExposedMethod[]>,
-  channelPrefix: string,
+const generatePreloadBridge = (
+  namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  baseDir?: string): Promise<string> => {
-  const bridges: string[] = [];
-  
-  // Generate type imports for preload
-  const typeImports = await generateTypeImports(namespaceGroups, outputDir, baseDir);
-  
-  for (const [namespace, methods] of namespaceGroups.entries()) {
-    const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-      const args = method.parameters.map(p => p.name).join(', ');
-      const functionId = `${namespace}:${method.methodName}`;
-      
-      return `  ${method.methodName}: (${params}) => controller.invoke('${functionId}'${args ? `, ${args}` : ''})`;
+  baseDir?: string): string => {
+
+  // Generate import declarations
+  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
+  const importDeclarations = importDescriptors.map(
+    ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
+
+  // Generate preload bridge declarations
+  const preloadBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
+  const preloadBridgeDeclarations = preloadBridgeDescriptors.map(({ ipcNamespace, functions }) => {
+    const functionsCode = functions.map(functionInfo => {
+      const params = functionInfo.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
+      const args = functionInfo.parameters.map(p => p.name).join(', ');
+      const functionId = `${ipcNamespace}:${functionInfo.name}`;
+      return `  ${functionInfo.name}: ${params.length === 1 ? params : `(${params})`} => controller.invoke('${functionId}'${args ? `, ${args}` : ''})`;
     }).join(',\n');
-    
-    bridges.push(`contextBridge.exposeInMainWorld('${namespace}', {\n${methodsCode}\n});`);
-  }
-  
+    return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
+  });
+
   const result = [
     "// This is auto-generated preloader by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
     "import { contextBridge, ipcRenderer } from 'electron';",
     "import { createSublimityRpcController } from 'sublimity-rpc';",
+    ...importDeclarations,
     '',
-    ...typeImports,
-    typeImports.length > 0 ? '' : null,
     '// Create RPC controller',
     'const controller = createSublimityRpcController({',
     '  onSendMessage: message => {',
@@ -290,300 +407,48 @@ const generatePreloadBridge = async (
     '  controller.insertMessage(message);',
     '});',
     '',
-    ...bridges,
+    '// Expose RPC functions to main process',
+    ...preloadBridgeDeclarations,
     ''
   ].filter(line => line !== null);
-  
-  // Ensure there's always a blank line after imports even if no type imports
-  if (typeImports.length === 0) {
-    result.splice(6, 0, '');
-  }
-  
+
   return result.join('\n');
 };
 
-const primitiveTypes = new Set([
-  'string', 'number', 'boolean', 'void', 'any', 'unknown', 'never',
-  'undefined', 'null', 'object', 'bigint', 'symbol',
-  // Built-in JavaScript types
-  'Date', 'RegExp', 'Error', 'Array', 'Object', 'Function', 'Map', 'Set', 'WeakMap', 'WeakSet',
-  'Promise', 'AsyncGenerator', 'Generator', 'ArrayBuffer', 'DataView', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray',
-  'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array',
-  'BigInt64Array', 'BigUint64Array',
-  // TypeScript utility types
-  'Record', 'Partial', 'Required', 'Pick', 'Omit', 'Exclude', 'Extract', 'NonNullable',
-  'ReturnType', 'InstanceType', 'ThisParameterType', 'OmitThisParameter', 'ThisType'
-]);
+/////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Check if a type is a primitive type that doesn't need import
- * @param type - The type to check
- * @returns Whether the type is primitive
+ * Renderer type descriptor
+ * @remarks This is a descriptor for a single renderer type.
  */
-const isPrimitiveType = (type: string): boolean => {
-  // Check for Promise<primitive> patterns
-  if (type.startsWith('Promise<') && type.endsWith('>')) {
-    const innerType = type.slice(8, -1).trim();
-    return isPrimitiveType(innerType);
-  }
-  
-  // Check for array patterns
-  if (type.endsWith('[]')) {
-    const arrayType = type.slice(0, -2).trim();
-    return isPrimitiveType(arrayType);
-  }
-  
-  // Check for union types with only primitives
-  if (type.includes('|')) {
-    const unionTypes = type.split('|').map(t => t.trim());
-    return unionTypes.every(t => isPrimitiveType(t));
-  }
-  
-  // Remove generic type parameters and array notation for analysis
-  const cleanType = type.replace(/\[.*?\]/g, '').replace(/<.*?>/g, '').trim();
-  
-  // Check if it's a primitive type
-  if (primitiveTypes.has(cleanType)) {
-    return true;
-  }
-  
-  return false;
-};
+interface RendererTypeDescriptor {
+  /**
+   * The Electron IPC namespace
+   */
+  readonly ipcNamespace: string;
+  /**
+   * The type name
+   */
+  readonly typeName: string;
+  /**
+   * The functions
+   */
+  readonly functions: FunctionInfo[];
+}
 
 /**
- * Extract custom types from a type string
- * @param type - The type string to analyze
- * @returns Array of custom type names
- */
-const extractCustomTypes = (type: string): string[] => {
-  const customTypes: Set<string> = new Set();
-  
-  // Skip if primitive type
-  if (isPrimitiveType(type)) {
-    return [];
-  }
-  
-  // Handle Promise<Type> patterns
-  if (type.startsWith('Promise<') && type.endsWith('>')) {
-    const innerType = type.slice(8, -1).trim();
-    return extractCustomTypes(innerType);
-  }
-  
-  // Handle array patterns
-  if (type.endsWith('[]')) {
-    const arrayType = type.slice(0, -2).trim();
-    return extractCustomTypes(arrayType);
-  }
-  
-  // Handle union types
-  if (type.includes('|')) {
-    const unionTypes = type.split('|').map(t => t.trim());
-    unionTypes.forEach(t => {
-      extractCustomTypes(t).forEach(customType => customTypes.add(customType));
-    });
-    return Array.from(customTypes);
-  }
-  
-  // Handle generic types (e.g., Array<Type>, Map<Key, Value>)
-  const genericMatch = type.match(/^([A-Za-z_][A-Za-z0-9_]*)<(.+)>$/);
-  if (genericMatch) {
-    const [, mainType, typeParams] = genericMatch;
-    
-    // Add main type if not primitive
-    if (!isPrimitiveType(mainType)) {
-      customTypes.add(mainType);
-    }
-    
-    // Parse type parameters
-    const params = typeParams.split(',').map(p => p.trim());
-    params.forEach(param => {
-      extractCustomTypes(param).forEach(customType => customTypes.add(customType));
-    });
-    
-    return Array.from(customTypes);
-  }
-  
-  // Simple type name
-  const typeMatch = type.match(/^[A-Za-z_][A-Za-z0-9_]*$/);
-  if (typeMatch && !isPrimitiveType(type)) {
-    customTypes.add(type);
-  }
-  
-  return Array.from(customTypes);
-};
-
-/**
- * Extract custom types and their file paths from TypeAST
- * @param typeAST - The TypeAST to analyze
- * @param typeToFilePath - Map to store type name to file path mapping
- */
-const extractCustomTypesFromAST = (typeAST: any, typeToFilePath: Map<string, string>): void => {
-  if (!typeAST || typeof typeAST !== 'object') return;
-  
-  switch (typeAST.kind) {
-    case 'primitive':
-      // Skip primitive types
-      break;
-      
-    case 'interface':
-      // Use the actual source location from TypeAST
-      if (typeAST.name && typeAST.sourceLocation && typeAST.sourceLocation.fileName) {
-        typeToFilePath.set(typeAST.name, typeAST.sourceLocation.fileName);
-      }
-      
-      // Recursively process properties
-      if (typeAST.properties) {
-        typeAST.properties.forEach((prop: any) => {
-          if (prop.type) {
-            extractCustomTypesFromAST(prop.type, typeToFilePath);
-          }
-        });
-      }
-      
-      // Process type parameters if present
-      if (typeAST.typeParameters) {
-        typeAST.typeParameters.forEach((param: any) => {
-          extractCustomTypesFromAST(param, typeToFilePath);
-        });
-      }
-      break;
-      
-    case 'type-reference':
-      // Process the referenced type
-      if (typeAST.referencedType) {
-        extractCustomTypesFromAST(typeAST.referencedType, typeToFilePath);
-      }
-      
-      // Process type arguments
-      if (typeAST.typeArguments) {
-        typeAST.typeArguments.forEach((arg: any) => {
-          extractCustomTypesFromAST(arg, typeToFilePath);
-        });
-      }
-      break;
-      
-    case 'array':
-      // Process element type
-      if (typeAST.elementType) {
-        extractCustomTypesFromAST(typeAST.elementType, typeToFilePath);
-      }
-      break;
-      
-    case 'function':
-      // Process parameter types
-      if (typeAST.parameters) {
-        typeAST.parameters.forEach((param: any) => {
-          if (param.type) {
-            extractCustomTypesFromAST(param.type, typeToFilePath);
-          }
-        });
-      }
-      
-      // Process return type
-      if (typeAST.returnType) {
-        extractCustomTypesFromAST(typeAST.returnType, typeToFilePath);
-      }
-      break;
-      
-    case 'unknown':
-      // Skip unknown types
-      break;
-  }
-};
-
-/**
- * Generate import statements for custom types
+ * Get renderer type descriptor list for the given namespace groups
  * @param namespaceGroups - The grouped methods
- * @param outputDir - The output directory for type definitions
- * @param baseDir - Base directory for resolving relative paths
- * @returns The import statements
+ * @returns The renderer type descriptor list, sorted to ensure deterministic order
  */
-const generateTypeImports = async (
-  namespaceGroups: Map<string, ExposedMethod[]>,
-  outputDir: string,
-  baseDir?: string): Promise<string[]> => {
-  console.log(`[DEBUG] generateTypeImports called for outputDir: ${outputDir}`);
-  const imports = new Set<string>();
-  const typeToFilePath = new Map<string, string>();
-  
-  // We need to re-extract TypeAST information to get proper file paths
-  // First, collect all file paths from methods
-  const filePaths = new Set<string>();
-  for (const methods of namespaceGroups.values()) {
-    for (const method of methods) {
-      filePaths.add(method.filePath);
-    }
-  }
-  
-  // Re-extract function methods to get TypeAST information
-  if (filePaths.size > 0) {
-    const tsConfigPath = baseDir || process.cwd(); // Use baseDir if provided, otherwise current directory
-    const functionMethods = extractFunctionMethods(tsConfigPath, Array.from(filePaths));
-    
-    // Create a mapping from method signature to TypeAST info
-    const methodToTypeInfo = new Map<string, FunctionMethodInfo>();
-    functionMethods.forEach(funcInfo => {
-      if (funcInfo.decoratorInfo && funcInfo.decoratorInfo.decorator === 'expose') {
-        const key = `${funcInfo.className || ''}:${funcInfo.name}:${funcInfo.filePath}`;
-        methodToTypeInfo.set(key, funcInfo);
-      }
-    });
-    
-    // Extract types using TypeAST information
-    for (const methods of namespaceGroups.values()) {
-      for (const method of methods) {
-        const key = `${method.className || ''}:${method.methodName}:${method.filePath}`;
-        const typeInfo = methodToTypeInfo.get(key);
-        
-        if (typeInfo) {
-          // Extract types from parameters using TypeAST
-          typeInfo.parameters.forEach(param => {
-            extractCustomTypesFromAST(param.type, typeToFilePath);
-          });
-          
-          // Extract types from return type using TypeAST
-          extractCustomTypesFromAST(typeInfo.returnType, typeToFilePath);
-        } else {
-          // Fallback to string-based extraction
-          method.parameters.forEach(param => {
-            const customTypes = extractCustomTypes(param.type);
-            customTypes.forEach(type => {
-              typeToFilePath.set(type, method.filePath);
-            });
-          });
-          
-          const returnTypes = extractCustomTypes(method.returnType);
-          returnTypes.forEach(type => {
-            typeToFilePath.set(type, method.filePath);
-          });
-        }
-      }
-    }
-  }
-  
-  // Generate import statements
-  const fileToTypes = new Map<string, string[]>();
-  
-  for (const [type, filePath] of typeToFilePath.entries()) {
-    if (!fileToTypes.has(filePath)) {
-      fileToTypes.set(filePath, []);
-    }
-    fileToTypes.get(filePath)!.push(type);
-  }
-  
-  
-  for (const [filePath, types] of fileToTypes.entries()) {
-    // Remove duplicates
-    const uniqueTypes = [...new Set(types)];
-    
-    const importPath = calculateImportPath(filePath, outputDir, baseDir);
-    imports.add(`import type { ${uniqueTypes.join(', ')} } from '${importPath}';`);
-  }
-  
-  const result = Array.from(imports).sort();
-  console.log(`[DEBUG] generateTypeImports returning ${result.length} imports for ${outputDir}`);
-  result.forEach(imp => console.log(`[DEBUG] Import: ${imp}`));
-  return result;
+const getRendererTypeDescriptorList = (namespaceGroups: Map<string, FunctionInfo[]>): RendererTypeDescriptor[] => {
+  return Array.from(namespaceGroups.entries()).
+    map(([ipcNamespace, functions]) => ({
+      ipcNamespace,
+      typeName: toPascalCase(ipcNamespace),
+      functions: functions.sort((a, b) => a.name.localeCompare(b.name))
+    })).
+    sort((a, b) => a.ipcNamespace.localeCompare(b.ipcNamespace));
 };
 
 /**
@@ -594,35 +459,39 @@ const generateTypeImports = async (
  * @returns The generated code
  * @remarks This function generates the type definitions for the exposed methods.
  */
-const generateTypeDefinitions = async (
-  namespaceGroups: Map<string, ExposedMethod[]>,
+const generateTypeDefinitions = (
+  namespaceGroups: Map<string, FunctionInfo[]>,
   outputDir: string,
-  baseDir?: string): Promise<string> => {
-  const interfaces: string[] = [];
-  const windowProperties: string[] = [];
+  baseDir?: string): string => {
   
-  // Generate type imports
-  const typeImports = await generateTypeImports(namespaceGroups, outputDir, baseDir);
-  
-  for (const [namespace, methods] of namespaceGroups.entries()) {
-    const typeName = toPascalCase(namespace);
+  // Generate import declarations
+  const importDescriptors = getImportDescriptorList(namespaceGroups, outputDir, baseDir);
+  const importDeclarations = importDescriptors.map(
+    ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
 
-    const methodsCode = methods.map(method => {
-      const params = method.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-      return `  ${method.methodName}(${params}): ${method.returnType};`;
+  // Generate renderer type declarations
+  const rendererTypeDescriptors = getRendererTypeDescriptorList(namespaceGroups);
+  const rendererTypeDeclarations = rendererTypeDescriptors.map(({ typeName, functions }) => {
+    const functionsCode = functions.map(functionInfo => {
+      const params = functionInfo.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ');
+      return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.returnType};`;   // Functions in interface
     }).join('\n');
-    
-    interfaces.push(`interface ${typeName} {\n${methodsCode}\n}`);
-    windowProperties.push(`    ${namespace}: ${typeName};`);
-  }
-  
+    return `interface ${typeName} {\n${functionsCode}\n}\n`;
+  });
+
+  // Generate window properties
+  const windowProperties = rendererTypeDescriptors.map(({ ipcNamespace, typeName }) => {
+    return `    readonly ${ipcNamespace}: ${typeName};`;   // Properties in window object
+  });
+
+
   const result = [
     "// This is auto-generated type definitions by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
-    ...typeImports,
-    typeImports.length > 0 ? '' : null,
-    ...interfaces,
+    ...importDeclarations,
+    '',
+    ...rendererTypeDeclarations,
     '',
     'declare global {',
     '  interface Window {',
@@ -652,19 +521,29 @@ const ensureDirectoryExists = async (dirPath: string): Promise<void> => {
   }
 };
 
-const safeWriteFile = async (filePath: string, content: string): Promise<boolean> => {
+/**
+ * Safe write a file
+ * @param filePath - The path to the file
+ * @param content - The content to write
+ * @returns Whether the file was written
+ */
+const writeFileWhenChanged = async (filePath: string, content: string): Promise<boolean> => {
   try {
+    // Check if the file exists and is the same as the content
     const existingContent = await fs.readFile(filePath, 'utf8');
     if (existingContent === content) {
+      // Do nothing (Any watchers will not be notified)
       return false;
     }
   } catch (error) {
     // If we can't read the file, proceed with writing
   }
 
+  // Ensure the directory exists
   const dir = dirname(filePath);
-
   await ensureDirectoryExists(dir);
+
+  // Write the file
   await fs.writeFile(filePath, content, 'utf8');
 
   return true;
@@ -707,92 +586,82 @@ const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, prel
  * @returns The generator
  */
 export const createElectronBridgeGenerator =
-  (options: ElectronBridgeOptions = {}) : ElectronBridgeGenerator => {
+  (options?: ElectronBridgeOptions) : ElectronBridgeGenerator => {
 
   // Makes default values for the options
-  const _options = {
-    mainProcessHandlerFile: options.mainProcessHandlerFile ?? 'src/main/generated/seb_main.ts',
-    preloadHandlerFile: options.preloadHandlerFile ?? 'src/preload/generated/seb_preload.ts',
-    typeDefinitionsFile: options.typeDefinitionsFile ?? 'src/renderer/src/generated/seb_types.ts',
-    defaultNamespace: options.defaultNamespace ?? 'mainProcess',
-    logger: options.logger ?? createConsoleLogger(),
-    baseDir: options.baseDir ?? process.cwd(),
-    channelPrefix: options.channelPrefix ?? "seb"
-  };
-
+  const {
+    logger = createConsoleLogger(),
+    baseDir = process.cwd(),
+    tsConfig,
+    defaultNamespace = 'mainProcess',
+    mainProcessHandlerFile = 'src/main/generated/seb_main.ts',
+    preloadHandlerFile = 'src/preload/generated/seb_preload.ts',
+    typeDefinitionsFile = 'src/renderer/src/generated/seb_types.ts',
+  } = options ?? { };
 
   /**
    * Analyze multiple files and extract exposed methods using the new extractor
    * @param filePaths - Array of file paths to analyze
    * @returns The exposed methods
    */
-  const analyzeFiles = async (filePaths: string[]): Promise<ExposedMethod[]> => {
+  const analyzeFiles = async (filePaths: string[]): Promise<FunctionInfo[]> => {
+  
+    // Load the TypeScript configuration object
+    const tsConfigObj = loadTsConfig(tsConfig, baseDir);
+
     // Filter out generated files
     const filteredFiles = filePaths.filter(filePath => 
       !isGeneratedFile(
         filePath,
-        _options.mainProcessHandlerFile,
-        _options.preloadHandlerFile,
-        _options.typeDefinitionsFile)
+        mainProcessHandlerFile,
+        preloadHandlerFile,
+        typeDefinitionsFile)
     );
 
     if (filteredFiles.length === 0) {
       return [];
     }
 
-    try {
-      return extractExposedMethodsFromExtractor(_options.baseDir!, filteredFiles, _options.defaultNamespace);
-    } catch (error) {
-      _options.logger.error(`Failed to extract exposed methods: ${error}`);
-      return [];
-    }
+    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir, filteredFiles, defaultNamespace);
   };
 
   /**
-   * Generate the files for the exposed methods
-   * @param methods - The exposed methods
+   * Generate the files for the exposed functions
+   * @param functions - The exposed functions
    */
-  const generateFiles = async (methods: ExposedMethod[]): Promise<void> => {
+  const generateFiles = async (functions: FunctionInfo[]): Promise<void> => {
     // Sort methods by namespace to ensure deterministic order
-    const namespaceGroups = groupMethodsByNamespace(methods);
+    const namespaceGroups = groupFunctionsByNamespace(functions, defaultNamespace);
 
     // Resolve file paths relative to baseDir
     const resolveOutputPath = (filePath: string): string => {
-      return resolve(_options.baseDir!, filePath);
+      return resolve(baseDir, filePath);
     };
 
     // Generate main handlers
-    const mainFilePath = resolveOutputPath(
-      _options.mainProcessHandlerFile);
-    const mainHandlersCode = await generateMainHandlers(
-      namespaceGroups, dirname(mainFilePath), _options.channelPrefix, _options.baseDir);
-    const wroteMainHandlers = await safeWriteFile(
-      mainFilePath, mainHandlersCode);
+    const mainFilePath = resolveOutputPath(mainProcessHandlerFile);
+    const mainHandlersCode = await generateMainHandlers(namespaceGroups, dirname(mainFilePath), baseDir);
+    const wroteMainHandlers = await writeFileWhenChanged(mainFilePath, mainHandlersCode);
 
     // Generate preload bridge
-    const preloadFilePath = resolveOutputPath(
-      _options.preloadHandlerFile);
-    const preloadBridgeCode = await generatePreloadBridge(
-      namespaceGroups, _options.channelPrefix, dirname(preloadFilePath), _options.baseDir);
-    const wrotePreloadHandlers = await safeWriteFile(
-      preloadFilePath, preloadBridgeCode);
+    const preloadFilePath = resolveOutputPath(preloadHandlerFile);
+    const preloadBridgeCode = await generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
+    const wrotePreloadHandlers = await writeFileWhenChanged(preloadFilePath, preloadBridgeCode);
 
     // Generate type definitions
-    const typeDefsFilePath = resolveOutputPath(
-      _options.typeDefinitionsFile!);
-    const typeDefsCode = await generateTypeDefinitions(
-      namespaceGroups, dirname(typeDefsFilePath), _options.baseDir);
-    const wroteTypeDefs = await safeWriteFile(
-      typeDefsFilePath, typeDefsCode);
+    const typeDefsFilePath = resolveOutputPath(typeDefinitionsFile);
+    const typeDefsCode = await generateTypeDefinitions(namespaceGroups, dirname(typeDefsFilePath), baseDir);
+    const wroteTypeDefs = await writeFileWhenChanged(typeDefsFilePath, typeDefsCode);
 
+    // Log the summary
     if (wroteMainHandlers || wrotePreloadHandlers || wroteTypeDefs) {
-      _options.logger.info(`Generated files:`);
-      if (wroteMainHandlers) _options.logger.info(`  - ${mainFilePath}`);
-      if (wrotePreloadHandlers) _options.logger.info(`  - ${preloadFilePath}`);
-      if (wroteTypeDefs) _options.logger.info(`  - ${typeDefsFilePath}`);
-      _options.logger.info(`  - Found ${methods.length} exposed methods in ${namespaceGroups.size} namespaces`);
+      logger.info(`Generated files:`);
+      if (wroteMainHandlers) logger.info(`  - ${mainFilePath}`);
+      if (wrotePreloadHandlers) logger.info(`  - ${preloadFilePath}`);
+      if (wroteTypeDefs) logger.info(`  - ${typeDefsFilePath}`);
+      logger.info(`  - Found ${functions.length} exposed functions in ${namespaceGroups.size} namespaces`);
     } else {
-      _options.logger.info(`Could not found any expose methods`);
+      logger.info(`Could not found any exposed functions`);
     }
   }
 
