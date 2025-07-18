@@ -103,7 +103,7 @@ const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDi
     // 'lib.d.ts'
     // 'lib.es2022.d.ts'
     // 'lib.foo.bar.d.ts'
-    node.sourceLocation.fileName.match(/lib\.([\w\.])+d\.ts$/)) {
+    node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)) {
     return undefined;
   }
 
