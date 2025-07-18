@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
+import { execSync } from 'child_process';
 import dayjs from 'dayjs';
 import { createElectronBridgeGenerator } from '../src/index';
 import { isCamelCase, toPascalCase } from '../src/generator';
@@ -1036,6 +1037,44 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
 `
         }
       ]);
+
+      // Create package.json for npm install
+      const packageJsonPath = join(baseDir, 'package.json');
+      const packageJson = {
+        name: 'test-project',
+        version: '1.0.0',
+        dependencies: {
+          typescript: '^5.0.0'
+        }
+      };
+      writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
+
+      // Update tsconfig.json to use node moduleResolution
+      const tsconfig = {
+        compilerOptions: {
+          target: "ES2020",
+          module: "CommonJS",
+          moduleResolution: "node",
+          strict: true,
+          declaration: true,
+          outDir: "./dist",
+          rootDir: "./src",
+          esModuleInterop: true,
+          skipLibCheck: true
+        },
+        include: ["src/**/*"],
+        exclude: ["node_modules", "dist"]
+      };
+      tsConfigFile = join(baseDir, 'tsconfig.json');
+      writeFileSync(tsConfigFile, JSON.stringify(tsconfig, null, 2));
+
+      // Run npm install to create node_modules
+      try {
+        execSync('npm install --silent', { cwd: baseDir, stdio: 'pipe' });
+        console.log('npm install completed successfully');
+      } catch (error) {
+        console.warn('npm install failed, continuing with test:', error.message);
+      }
 
       const generator = createElectronBridgeGenerator({
         baseDir: baseDir,
