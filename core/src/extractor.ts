@@ -244,7 +244,7 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
  * Convert TypeScript type to TypeAST
  * @param type TypeScript type
  * @param checker TypeChecker
- * @param currentLocation Currently processed location
+ * @param parentLocation Parent processed location
  * @param visitedInterfaces Track visited interfaces to avoid circular references
  * @returns TypeAST
  */
@@ -259,7 +259,9 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
 
   // Handle type alias
   if (type.aliasSymbol) {
-    const typeArguments = type.aliasTypeArguments?.map(arg => convertTypeToAST(arg, checker, currentLocation, visitedInterfaces));
+    const typeArguments = type.aliasTypeArguments?.map(arg =>
+      convertTypeToAST(arg, checker, currentLocation, visitedInterfaces));
+
     return {
       kind: 'type-alias',
       name: typeString,
