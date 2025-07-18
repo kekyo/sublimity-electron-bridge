@@ -98,31 +98,46 @@ const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDi
   if (!node.sourceLocation) {
     return undefined;
   }
+    
+  // Debug logging for TypeScript API types
+  if (node.sourceLocation.packageName === 'typescript') {
+    console.log(`\n=== calculateImportPath Debug ===`);
+    console.log(`Package: ${node.sourceLocation.packageName}`);
+    console.log(`FileName: ${node.sourceLocation.fileName}`);
+    console.log(`Lib pattern match: ${!!node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)}`);
+  }
+  
   // Ignore import path if the source file is primitive and/or inside of TypeScript runtime library types.
   if (node.sourceLocation.packageName === 'typescript' &&
     // 'lib.d.ts'
     // 'lib.es2022.d.ts'
     // 'lib.foo.bar.d.ts'
     node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)) {
+    console.log(`Ignoring lib.d.ts file`);
     return undefined;
   }
 
+  // When package name is available, use it as the import path
+  if (node.sourceLocation.packageName) {
+    return node.sourceLocation.packageName;
+  }
+
   let absoluteSourcePath: string;
-  
+
   // Handle relative vs absolute paths
-  if (baseDir && node.sourceLocation && !isAbsolute(node.sourceLocation.fileName)) {
+  if (baseDir && !isAbsolute(node.sourceLocation.fileName)) {
     // If baseDir is provided and sourceFilePath is relative, resolve it relative to baseDir
     absoluteSourcePath = resolve(baseDir, node.sourceLocation.fileName);
   } else {
     // Otherwise, resolve it as is
     absoluteSourcePath = resolve(node.sourceLocation.fileName);
   }
-  
+
   const normalizedOutputDir = resolve(outputDir);
-  
+
   // Calculate relative path
   let importPath = relative(normalizedOutputDir, absoluteSourcePath);
-  
+
   // Remove .ts extension
   importPath = importPath.replace(/\.ts$/, '');
   
