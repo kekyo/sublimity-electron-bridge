@@ -19,7 +19,7 @@ export default defineConfig({
     },
     target: 'node14',
     rollupOptions: {
-      external: ['typescript', 'path', 'fs', 'crypto']
+      external: ['typescript', 'path', 'fs', 'fs/promises', 'crypto']
     }
   }
 });

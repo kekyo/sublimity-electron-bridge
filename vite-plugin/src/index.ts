@@ -35,11 +35,6 @@ export interface SublimityElectronBridgeVitePluginOptions {
    */
   defaultNamespace?: string;
   /**
-   * Channel prefix.
-   * @remarks Default: 'seb'
-   */
-  channelPrefix?: string;
-  /**
    * Whether to enable the worker for processing files (Default: true)
    */
   enableWorker?: boolean;
@@ -129,7 +124,6 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
           preloadHandlerFile: options.preloadHandlerFile,
           typeDefinitionsFile: options.typeDefinitionsFile,
           defaultNamespace: options.defaultNamespace,
-          channelPrefix: options.channelPrefix,
           baseDir: options.baseDir
         },
         filePaths
@@ -156,7 +150,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 };
 
 const processAllFilesCore = async (
-  logger: Logger, baseDir: string | undefined, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
+  logger: Logger, baseDir: string, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
 
   logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${__VERSION__}]`);
 
@@ -170,7 +164,6 @@ const processAllFilesCore = async (
       preloadHandlerFile: options.preloadHandlerFile,
       typeDefinitionsFile: options.typeDefinitionsFile,
       defaultNamespace: options.defaultNamespace,
-      channelPrefix: options.channelPrefix,
       logger,
       baseDir
     };
@@ -190,7 +183,7 @@ const processAllFilesCore = async (
 
 interface DemandArgs {
   logger: Logger;
-  baseDir: string | undefined;
+  baseDir: string;
   processingPrefix: string;
 }
 
@@ -204,7 +197,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
   let demandArgs: DemandArgs | undefined;
   let runningDeferred: Deferred<void> | undefined;
 
-  const processAllFiles = (logger: Logger, baseDir: string | undefined, processingPrefix: string): Promise<void> => {
+  const processAllFiles = (logger: Logger, baseDir: string, processingPrefix: string): Promise<void> => {
     if (demandDeferred) {
       demandDeferred.resolve();
       demandDeferred = undefined;
@@ -222,6 +215,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       try {
         // Insert processing count before logger message
         const processingLogger = {
+          debug: (msg: string) => logger.debug(`[${processingPrefix}]: ${msg}`),
           info: (msg: string) => logger.info(`[${processingPrefix}]: ${msg}`),
           warn: (msg: string) => logger.warn(`[${processingPrefix}]: ${msg}`),
           error: (msg: string) => logger.error(`[${processingPrefix}]: ${msg}`)
@@ -285,7 +279,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         case 'change':
         case 'unlink': {
           logger.info(`[seb-vite:watch:${pc}]: Detected: ${event}: ${filePath}`);
-          await processAllFiles(logger, baseDir, `seb-vite:watch:${pc}`);
+          await processAllFiles(logger, baseDir!, `seb-vite:watch:${pc}`);
         }
       }
     });
@@ -306,6 +300,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
       logger = {
+        debug: config?.customLogger?.info ?? logger.debug,
         info: config?.customLogger?.info ?? logger.info,
         warn: config?.customLogger?.warn ?? logger.warn,
         error: config?.customLogger?.error ?? logger.error,
@@ -315,9 +310,10 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
       logger = {
-        info: config?.logger?.info ?? logger.info,
-        warn: config?.logger?.warn ?? logger.warn,
-        error: config?.logger?.error ?? logger.error,
+        debug: config?.logger?.info ?? config?.customLogger?.info ?? logger.debug,
+        info: config?.logger?.info ?? config?.customLogger?.info ?? logger.info,
+        warn: config?.logger?.warn ?? config?.customLogger?.warn ?? logger.warn,
+        error: config?.logger?.error ?? config?.customLogger?.error ?? logger.error,
       };
       await stopFileWatching();
       await processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);

@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-vite",
-  "version": "0.15.7",
+  "version": "0.15.21",
   "description": "Electron bridge generator for automatic IPC setup (Vite plugin)",
   "keywords": [
     "electron",
