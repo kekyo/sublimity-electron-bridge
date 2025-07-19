@@ -320,10 +320,10 @@ export const otherArrowFunction = (): Promise<any> => {
     const complexArrowFunction = results.find(fn => fn.name === 'complexArrowFunction');
     expect(complexArrowFunction).toBeDefined();
     
-    // Check complex object parameter - anonymous object types are classified as 'unknown' by TypeScript
+    // Check complex object parameter - anonymous object types are classified as 'object' by TypeScript
     const dataParam = complexArrowFunction!.type.parameters[0];
     expect(dataParam.name).toBe('data');
-    expect(dataParam.type.kind).toBe('unknown');
+    expect(dataParam.type.kind).toBe('object');
     expect(dataParam.type.typeString).toBe('{ name: string; value: number; }');
 
     // Check function parameter
