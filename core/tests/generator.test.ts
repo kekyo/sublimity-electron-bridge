@@ -1069,16 +1069,11 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
       writeFileSync(tsConfigFile, JSON.stringify(tsconfig, null, 2));
 
       // Run npm install to create node_modules
-      try {
-        execSync('npm install --silent', { 
-          cwd: baseDir, 
-          stdio: 'pipe',
-          timeout: 30000 // 30 seconds timeout
-        });
-        console.log('npm install completed successfully');
-      } catch (error) {
-        console.warn('npm install failed, continuing with test:', error.message);
-      }
+      execSync('npm install --silent', { 
+        cwd: baseDir, 
+        stdio: 'pipe',
+        timeout: 30000 // 30 seconds timeout
+      });
 
       const generator = createElectronBridgeGenerator({
         baseDir: baseDir,

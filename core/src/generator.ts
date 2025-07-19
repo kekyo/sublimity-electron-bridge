@@ -241,6 +241,12 @@ const traverseAndGetImportPathMaps = (
       traverseAndGetImportPathMaps(node.right, outputDir, baseDir, importPathMap);
       break;
     }
+    // Type AND expression
+    case 'and': {
+      traverseAndGetImportPathMaps(node.left, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.right, outputDir, baseDir, importPathMap);
+      break;
+    }
     // Unknown types
     case 'unknown': {
       setImportPathMap(node.typeString, node, outputDir, baseDir, importPathMap);

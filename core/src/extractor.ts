@@ -39,7 +39,7 @@ export interface SourceCodeFragment {
  * Base interface for type AST
  */
 export interface TypeNode extends SourceCodeFragment {
-  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'or' | 'unknown';
+  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'or' | 'and' | 'unknown';
   typeString: string;
 }
 
@@ -48,7 +48,7 @@ export interface TypeNode extends SourceCodeFragment {
  */
 export interface PrimitiveTypeNode extends TypeNode {
   kind: 'primitive';
-  type: 'string' | 'number' | 'boolean' | 'null' | 'undefined' | 'void' | 'any' | 'bigint' | 'symbol' | 'buffer';
+  type: 'string' | 'number' | 'boolean' | 'null' | 'undefined' | 'void' | 'any' | 'bigint' | 'symbol';
 }
 
 /**
@@ -139,6 +139,13 @@ export interface TypeOrExpressionNode extends BinaryExpression {
 }
 
 /**
+ * Type AND expression node
+ */
+export interface TypeAndExpressionNode extends BinaryExpression {
+  kind: 'and';
+}
+
+/**
  * Unknown type node
  */
 export interface UnknownTypeNode extends TypeNode {
@@ -151,7 +158,9 @@ export interface UnknownTypeNode extends TypeNode {
 export type TypeAST =
   PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | TypeAliasNode |
   FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode |
-  TypeOrExpressionNode | UnknownTypeNode;
+  TypeOrExpressionNode | TypeAndExpressionNode | UnknownTypeNode;
+
+///////////////////////////////////////////////////////////////////////////
 
 /**
  * Function information for AST
@@ -197,7 +206,7 @@ const getPackageNameFromPath = (path: string): string | undefined => {
 };
 
 /**
- * Extract position information from TypeScript Node
+ * Extract location information from TypeScript Node
  * @param node TypeScript Node
  * @returns SourceLocation
  */
@@ -212,14 +221,15 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
   // Get module name from the source file.
   // When not available, try to get it from 'node_modules' directory.
   const packageName = sourceFile.moduleName ?? getPackageNameFromPath(fileName);
-  
-  const start = node.getStart();
-  const end = node.getEnd();
-  
+
+  // When source file is available
   if (sourceFile) {
+    const start = node.getStart();
+    const end = node.getEnd();
     const startPos = sourceFile.getLineAndCharacterOfPosition(start);
     const endPos = sourceFile.getLineAndCharacterOfPosition(end);
     
+    // Return exact information
     return {
       fileName,
       packageName,
@@ -240,15 +250,45 @@ const getSourceLocation = (node: ts.Node | undefined): SourceLocation | undefine
   };
 };
 
+const setPrimitiveType = (
+  typeAST: TypeAST,
+  type: 'string' | 'number' | 'boolean' | 'null' | 'undefined' | 'void' | 'any' | 'bigint' | 'symbol',
+  currentLocation: SourceLocation | undefined) => {
+  const primitiveTypeNode = typeAST as PrimitiveTypeNode;
+  primitiveTypeNode.kind = 'primitive';
+  primitiveTypeNode.type = type;
+  primitiveTypeNode.typeString = type;
+  primitiveTypeNode.sourceLocation = currentLocation;
+  return primitiveTypeNode;
+};
+
 /**
  * Convert TypeScript type to TypeAST
  * @param type TypeScript type
  * @param checker TypeChecker
  * @param parentLocation Parent processed location
- * @param visitedInterfaces Track visited interfaces to avoid circular references
+ * @param visitedTypes Track visited interfaces to avoid circular references
  * @returns TypeAST
  */
-const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation: SourceLocation | undefined, visitedInterfaces: Set<string> = new Set()): TypeAST => {
+const convertTypeToAST = (
+  type: ts.Type,
+  checker: ts.TypeChecker,
+  parentLocation: SourceLocation | undefined,
+  visitedTypes: Map<ts.Type, TypeAST>): TypeAST => {
+
+  // Check if the type has already been visited
+  let typeAST = visitedTypes.get(type);
+  if (typeAST) {
+    // Return the cached typeAST
+    return typeAST;
+  }
+
+  // Preallocate the typeAST
+  typeAST = { } as TypeAST;
+  visitedTypes.set(type, typeAST);
+
+  //------------------------------------------------
+
   const typeString = checker.typeToString(type);
 
   // Get source location from the type, or use the parent location if not available
@@ -260,61 +300,57 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
   // Handle type alias
   if (type.aliasSymbol) {
     const typeArguments = type.aliasTypeArguments?.map(arg =>
-      convertTypeToAST(arg, checker, currentLocation, visitedInterfaces));
+      convertTypeToAST(arg, checker, currentLocation, visitedTypes));
 
-    return {
-      kind: 'type-alias',
-      name: typeString,
-      typeArguments,
-      typeString,
-      sourceLocation: currentLocation
-    };
-  }
-
-  // Check for Buffer type first (it's a specific global interface)
-  if (typeString === 'Buffer' || typeString.startsWith('Buffer<')) {
-    return { kind: 'primitive', type: 'buffer', typeString, sourceLocation: currentLocation };
+    const typeAliasNode = typeAST as TypeAliasNode;
+    typeAliasNode.kind = 'type-alias';
+    typeAliasNode.name = typeString;
+    typeAliasNode.typeArguments = typeArguments;
+    typeAliasNode.typeString = typeString;
+    typeAliasNode.sourceLocation = currentLocation;
+    return typeAliasNode;
   }
 
   // Determine primitive types
   if (type.flags & ts.TypeFlags.String) {
-    return { kind: 'primitive', type: 'string', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'string', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Number) {
-    return { kind: 'primitive', type: 'number', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'number', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Boolean) {
-    return { kind: 'primitive', type: 'boolean', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'boolean', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Null) {
-    return { kind: 'primitive', type: 'null', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'null', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Undefined) {
-    return { kind: 'primitive', type: 'undefined', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'undefined', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Void) {
-    return { kind: 'primitive', type: 'void', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'void', currentLocation);
   }
   if (type.flags & ts.TypeFlags.Any) {
-    return { kind: 'primitive', type: 'any', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'any', currentLocation);
   }
   if (type.flags & ts.TypeFlags.BigInt) {
-    return { kind: 'primitive', type: 'bigint', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'bigint', currentLocation);
   }
   if (type.flags & ts.TypeFlags.ESSymbol) {
-    return { kind: 'primitive', type: 'symbol', typeString, sourceLocation: currentLocation };
+    return setPrimitiveType(typeAST, 'symbol', currentLocation);
   }
 
   // Determine array types
   if (checker.isArrayType(type)) {
     const typeArguments = checker.getTypeArguments(type as ts.TypeReference);
     const elementType = typeArguments && typeArguments.length > 0 ? typeArguments[0] : checker.getAnyType();
-    return {
-      kind: 'array',
-      elementType: convertTypeToAST(elementType, checker, currentLocation, visitedInterfaces),
-      typeString,
-      sourceLocation: currentLocation
-    };
+
+    const arrayTypeNode = typeAST as ArrayTypeNode;
+    arrayTypeNode.kind = 'array';
+    arrayTypeNode.elementType = convertTypeToAST(elementType, checker, currentLocation, visitedTypes);
+    arrayTypeNode.typeString = typeString;
+    arrayTypeNode.sourceLocation = currentLocation;
+    return arrayTypeNode;
   }
 
   // Determine generic types (TypeReference with type arguments)
@@ -340,7 +376,9 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
             // Get the original type parameters (T, U, K, V, etc.)
             originalTypeParameters = declaration.typeParameters.map(typeParam => {
               const paramType = checker.getTypeAtLocation(typeParam);
-              return convertTypeToAST(paramType, checker, currentLocation, new Set(visitedInterfaces));
+              const paramLocation = getSourceLocation(typeParam) ?? currentLocation;
+
+              return convertTypeToAST(paramType, checker, paramLocation, visitedTypes);
             });
 
             // Generate the referenced type string using the typeString from recursively generated TypeNodes
@@ -353,10 +391,12 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
       // If we couldn't get type parameters from the declaration, fall back to unknown type parameters
       if (originalTypeParameters.length === 0) {
         // Create unknown type parameters based on the number of type arguments
-        originalTypeParameters = typeArgs.map((_, index) => ({
+        originalTypeParameters = typeArgs.map((typeArg, index) => ({
           kind: 'unknown' as const,
           typeString: `T${index}`,
-          sourceLocation: currentLocation
+          sourceLocation: getSourceLocation(
+            typeArg.aliasSymbol?.declarations?.at(0) ??
+            typeArg.symbol?.declarations?.at(0)) ?? currentLocation
         }));
 
         // Generate the referenced type string using the typeString from the created TypeNodes
@@ -365,8 +405,14 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
       }
 
       // Convert type arguments for the type reference
-      const typeArguments = typeArgs.map(arg => 
-        convertTypeToAST(arg, checker, currentLocation, visitedInterfaces)
+      const typeArguments = typeArgs.map(typeArg => 
+        convertTypeToAST(
+          typeArg,
+          checker,
+          getSourceLocation(
+            typeArg.aliasSymbol?.declarations?.at(0) ??
+            typeArg.symbol?.declarations?.at(0)) ?? currentLocation,
+          visitedTypes)
       );
 
       // Create the referenced interface type (may have type parameters if it's a generic interface)
@@ -387,113 +433,144 @@ const convertTypeToAST = (type: ts.Type, checker: ts.TypeChecker, parentLocation
         jsdocDecorator
       };
 
-      return {
-        kind: 'type-reference',
-        referencedType,
-        typeArguments,
-        typeString,
-        sourceLocation: currentLocation
-      };
+      const typeReferenceTypeNode = typeAST as TypeReferenceTypeNode;
+      typeReferenceTypeNode.kind = 'type-reference';
+      typeReferenceTypeNode.referencedType = referencedType;
+      typeReferenceTypeNode.typeArguments = typeArguments;
+      typeReferenceTypeNode.typeString = typeString;
+      typeReferenceTypeNode.sourceLocation = currentLocation;
+      return typeReferenceTypeNode;
     }
   }
-  
+
   // Determine function types
   const signatures = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   if (signatures.length > 0) {
     const signature = signatures[0];
     const parameters = signature.getParameters().map(param => {
       const paramType = checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
-      
+
       // Determine rest parameters
       const declaration = param.valueDeclaration as ts.ParameterDeclaration;
       const isRestParameter = !!(declaration && declaration.dotDotDotToken);
-      
-      return {
+
+      const functionParameterNode: FunctionParameterNode = {
         name: param.getName(),
-        type: convertTypeToAST(paramType, checker, currentLocation, new Set(visitedInterfaces)),
+        type: convertTypeToAST(paramType, checker, currentLocation, visitedTypes),
         isRestParameter
       };
+      return functionParameterNode;
     });
-    
+
     const returnType = checker.getReturnTypeOfSignature(signature);
-    
-    return {
-      kind: 'function',
-      parameters,
-      returnType: convertTypeToAST(returnType, checker, currentLocation, new Set(visitedInterfaces)),
-      typeString,
-      sourceLocation: currentLocation
-    };
+
+    const functionTypeNode = typeAST as FunctionTypeNode;
+    functionTypeNode.kind = 'function';
+    functionTypeNode.parameters = parameters;
+    functionTypeNode.returnType = convertTypeToAST(returnType, checker, currentLocation, visitedTypes);
+    functionTypeNode.typeString = typeString;
+    functionTypeNode.sourceLocation = currentLocation;
   }
-  
+
+  // Determine anonymous function types
+  if (type.flags & ts.TypeFlags.Object && (type as ts.ObjectType).objectFlags & ts.ObjectFlags.Anonymous) {
+    const signature = (type as ts.ObjectType).getCallSignatures()[0];
+    if (!signature) {
+      console.log(type);
+    }
+    const parameters = signature.getParameters().map(param => {
+      const paramType = checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
+
+      // Determine rest parameters
+      const declaration = param.valueDeclaration as ts.ParameterDeclaration;
+      const isRestParameter = !!(declaration && declaration.dotDotDotToken);
+
+      const functionParameterNode: FunctionParameterNode = {
+        name: param.getName(),
+        type: convertTypeToAST(paramType, checker, currentLocation, visitedTypes),
+        isRestParameter
+      };
+      return functionParameterNode;
+    });
+
+    const returnType = checker.getReturnTypeOfSignature(signature);
+
+    const functionTypeNode = typeAST as FunctionTypeNode;
+    functionTypeNode.kind = 'function';
+    functionTypeNode.parameters = parameters;
+    functionTypeNode.returnType = convertTypeToAST(returnType, checker, currentLocation, visitedTypes);
+    functionTypeNode.typeString = typeString;
+    functionTypeNode.sourceLocation = currentLocation;
+    return functionTypeNode;
+  }
+
   // Determine interface types
   if (type.symbol && (type.symbol.flags & ts.SymbolFlags.Interface)) {
     const interfaceName = type.symbol.getName();
     
-    // Check for circular references
-    if (visitedInterfaces.has(interfaceName)) {
-      return {
-        kind: 'interface',
-        name: interfaceName,
-        properties: [], // Empty property array for circular references
-        typeString: checker.typeToString(type),
-        sourceLocation: currentLocation
-      };
-    }
-    
-    visitedInterfaces.add(interfaceName);
-    
     const properties = checker.getPropertiesOfType(type).map(prop => {
       const propType = checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
       const isOptional = (prop.getFlags() & ts.SymbolFlags.Optional) !== 0;
-      
-      return {
+      const propLocation = getSourceLocation(prop?.declarations?.at(0)) ?? currentLocation;
+
+      const propertyNode: PropertyNode = {
         name: prop.getName(),
-        type: convertTypeToAST(propType, checker, currentLocation, new Set(visitedInterfaces)),
+        type: convertTypeToAST(propType, checker, propLocation, visitedTypes),
         isOptional
       };
+      return propertyNode;
     });
-    
-    visitedInterfaces.delete(interfaceName);
-    
-    return {
-      kind: 'interface',
-      name: interfaceName,
-      properties,
-      typeString: checker.typeToString(type),
-      sourceLocation: currentLocation
-    };
+
+    const interfaceTypeNode = typeAST as InterfaceTypeNode;
+    interfaceTypeNode.kind = 'interface';
+    interfaceTypeNode.name = interfaceName;
+    interfaceTypeNode.properties = properties;
+    interfaceTypeNode.typeString = checker.typeToString(type);
+    interfaceTypeNode.sourceLocation = currentLocation;
+    return interfaceTypeNode;
   }
 
   // Determine generic parameter types
   if (type.flags & ts.TypeFlags.TypeParameter) {
     const typeParameter = type as ts.TypeParameter;
-    return {
-      kind: 'generic-parameter',
-      name: typeParameter.symbol.getName(),
-      typeString: checker.typeToString(type),
-      sourceLocation: currentLocation
-    };
+    const genericParameterTypeNode = typeAST as GenericParameterTypeNode;
+    genericParameterTypeNode.kind = 'generic-parameter';
+    genericParameterTypeNode.name = typeParameter.symbol.getName();
+    genericParameterTypeNode.typeString = checker.typeToString(type);
+    genericParameterTypeNode.sourceLocation = currentLocation;
+    return genericParameterTypeNode;
   }
 
   // Determine type OR expression
   if (type.flags & ts.TypeFlags.Union) {
     const unionType = type as ts.UnionType;
-    return {
-      kind: 'or',
-      left: convertTypeToAST(unionType.types[0], checker, currentLocation, visitedInterfaces),
-      right: convertTypeToAST(unionType.types[1], checker, currentLocation, visitedInterfaces),
-      typeString: checker.typeToString(type),
-      sourceLocation: currentLocation
-    };
+    const typeOrExpressionNode = typeAST as TypeOrExpressionNode;
+    typeOrExpressionNode.kind = 'or';
+    typeOrExpressionNode.left = convertTypeToAST(unionType.types[0], checker, currentLocation, visitedTypes);
+    typeOrExpressionNode.right = convertTypeToAST(unionType.types[1], checker, currentLocation, visitedTypes);
+    typeOrExpressionNode.typeString = checker.typeToString(type);
+    typeOrExpressionNode.sourceLocation = currentLocation;
+    return typeOrExpressionNode;
   }
-  
+ 
+  // Determine type AND expression
+  if (type.flags & ts.TypeFlags.Intersection) {
+    const intersectionType = type as ts.IntersectionType;
+    const typeAndExpressionNode = typeAST as TypeAndExpressionNode;
+    typeAndExpressionNode.kind = 'and';
+    typeAndExpressionNode.left = convertTypeToAST(intersectionType.types[0], checker, currentLocation, visitedTypes);
+    typeAndExpressionNode.right = convertTypeToAST(intersectionType.types[1], checker, currentLocation, visitedTypes);
+    typeAndExpressionNode.typeString = checker.typeToString(type);
+    typeAndExpressionNode.sourceLocation = currentLocation;
+    return typeAndExpressionNode;
+  }
+ 
   // Other types are treated as unknown types
-  return {
-    kind: 'unknown',
-    typeString,
-    sourceLocation: currentLocation
-  };
+  const unknownTypeNode = typeAST as UnknownTypeNode;
+  unknownTypeNode.kind = 'unknown';
+  unknownTypeNode.typeString = typeString;
+  unknownTypeNode.sourceLocation = currentLocation;
+  return unknownTypeNode;
 };
 
 /**
@@ -540,7 +617,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
   const parsedConfig = ts.parseJsonConfigFileContent(
     tsConfig,
     ts.sys,
-    baseDir || process.cwd()
+    baseDir
   );
 
   // Generate Program for entire project (including all files)
@@ -552,6 +629,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
 
   const checker = program.getTypeChecker();
   const result: FunctionInfo[] = [];
+  const visitedTypes = new Map<ts.Type, TypeAST>();
 
   // Process each file
   for (const sourceFilePath of sourceFilePaths) {
@@ -568,7 +646,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
       // Handle class methods
       if (ts.isClassDeclaration(node) && node.name) {
         const declaredType = convertTypeToAST(
-          checker.getTypeAtLocation(node), checker, currentLocation);
+          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes);
         
         node.members.forEach(member => {
           if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
@@ -576,7 +654,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
             const jsdocDecorator = extractJSDocDecorator(member);
             
             const functionType = convertTypeToAST(
-              checker.getTypeAtLocation(member), checker, currentLocation) as FunctionTypeNode;
+              checker.getTypeAtLocation(member), checker, currentLocation, visitedTypes) as FunctionTypeNode;
 
             result.push({
               kind: 'class-method',
@@ -596,7 +674,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
         const jsdocDecorator = extractJSDocDecorator(node);
 
         const functionType = convertTypeToAST(
-          checker.getTypeAtLocation(node), checker, currentLocation) as FunctionTypeNode;
+          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes) as FunctionTypeNode;
 
         result.push({
           kind: 'function',
@@ -619,7 +697,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
             const arrowFunc = declaration.initializer;
 
             const functionType = convertTypeToAST(
-              checker.getTypeAtLocation(arrowFunc), checker, currentLocation) as FunctionTypeNode;
+              checker.getTypeAtLocation(arrowFunc), checker, currentLocation, visitedTypes) as FunctionTypeNode;
             
             result.push({
               kind: 'arrow-function',
