@@ -39,7 +39,7 @@ export interface SourceCodeFragment {
  * Base interface for type AST
  */
 export interface TypeNode extends SourceCodeFragment {
-  kind: 'primitive' | 'interface' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'or' | 'and' | 'unknown';
+  kind: 'primitive' | 'interface' | 'object' | 'function' | 'array' | 'type-reference' | 'type-alias' | 'generic-parameter' | 'or' | 'and' | 'unknown';
   typeString: string;
 }
 
@@ -69,6 +69,14 @@ export interface InterfaceTypeNode extends TypeNode {
   properties: PropertyNode[];
   typeParameters?: TypeAST[];
   jsdocDecorator?: JSDocDecorator;
+}
+
+/**
+ * (Anonymous) Object type node
+ */
+export interface ObjectTypeNode extends TypeNode {
+  kind: 'object';
+  properties: PropertyNode[];
 }
 
 /**
@@ -156,7 +164,7 @@ export interface UnknownTypeNode extends TypeNode {
  * Type AST
  */
 export type TypeAST =
-  PrimitiveTypeNode | InterfaceTypeNode | TypeReferenceTypeNode | TypeAliasNode |
+  PrimitiveTypeNode | InterfaceTypeNode | ObjectTypeNode | TypeReferenceTypeNode | TypeAliasNode |
   FunctionTypeNode | ArrayTypeNode | GenericParameterTypeNode |
   TypeOrExpressionNode | TypeAndExpressionNode | UnknownTypeNode;
 
@@ -472,43 +480,66 @@ const convertTypeToAST = (
     functionTypeNode.sourceLocation = currentLocation;
   }
 
-  // Determine anonymous function types
+  // Determine anonymous types
   if (type.flags & ts.TypeFlags.Object && (type as ts.ObjectType).objectFlags & ts.ObjectFlags.Anonymous) {
-    const signature = (type as ts.ObjectType).getCallSignatures()[0];
-    if (!signature) {
-      console.log(type);
+    const objectType = type as ts.ObjectType;
+
+    // Is this anonymous function type?
+    const signature = objectType.getCallSignatures()[0];
+    if (signature) {
+      const parameters = signature.getParameters().map(param => {
+        const paramType = checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
+
+        // Determine rest parameters
+        const declaration = param.valueDeclaration as ts.ParameterDeclaration;
+        const isRestParameter = !!(declaration && declaration.dotDotDotToken);
+
+        const functionParameterNode: FunctionParameterNode = {
+          name: param.getName(),
+          type: convertTypeToAST(paramType, checker, currentLocation, visitedTypes),
+          isRestParameter
+        };
+        return functionParameterNode;
+      });
+
+      const returnType = checker.getReturnTypeOfSignature(signature);
+
+      const functionTypeNode = typeAST as FunctionTypeNode;
+      functionTypeNode.kind = 'function';
+      functionTypeNode.parameters = parameters;
+      functionTypeNode.returnType = convertTypeToAST(returnType, checker, currentLocation, visitedTypes);
+      functionTypeNode.typeString = typeString;
+      functionTypeNode.sourceLocation = currentLocation;
+      return functionTypeNode;
+    // Anonymous object type
+    } else {
+      const properties = checker.getPropertiesOfType(objectType).map(prop => {
+        const propType = checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
+        const isOptional = (prop.getFlags() & ts.SymbolFlags.Optional) !== 0;
+        const propLocation = getSourceLocation(prop?.declarations?.at(0)) ?? currentLocation;
+
+        const propertyNode: PropertyNode = {
+          name: prop.getName(),
+          type: convertTypeToAST(propType, checker, propLocation, visitedTypes),
+          isOptional
+        };
+        return propertyNode;
+      });
+
+      const objectTypeNode = typeAST as ObjectTypeNode;
+      objectTypeNode.kind = 'object';
+      objectTypeNode.properties = properties;
+      objectTypeNode.typeString = checker.typeToString(type);
+      objectTypeNode.sourceLocation = currentLocation;
+      return objectTypeNode;
     }
-    const parameters = signature.getParameters().map(param => {
-      const paramType = checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
-
-      // Determine rest parameters
-      const declaration = param.valueDeclaration as ts.ParameterDeclaration;
-      const isRestParameter = !!(declaration && declaration.dotDotDotToken);
-
-      const functionParameterNode: FunctionParameterNode = {
-        name: param.getName(),
-        type: convertTypeToAST(paramType, checker, currentLocation, visitedTypes),
-        isRestParameter
-      };
-      return functionParameterNode;
-    });
-
-    const returnType = checker.getReturnTypeOfSignature(signature);
-
-    const functionTypeNode = typeAST as FunctionTypeNode;
-    functionTypeNode.kind = 'function';
-    functionTypeNode.parameters = parameters;
-    functionTypeNode.returnType = convertTypeToAST(returnType, checker, currentLocation, visitedTypes);
-    functionTypeNode.typeString = typeString;
-    functionTypeNode.sourceLocation = currentLocation;
-    return functionTypeNode;
   }
 
   // Determine interface types
   if (type.symbol && (type.symbol.flags & ts.SymbolFlags.Interface)) {
-    const interfaceName = type.symbol.getName();
-    
-    const properties = checker.getPropertiesOfType(type).map(prop => {
+    const interfaceType = type as ts.InterfaceType;
+
+    const properties = checker.getPropertiesOfType(interfaceType).map(prop => {
       const propType = checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
       const isOptional = (prop.getFlags() & ts.SymbolFlags.Optional) !== 0;
       const propLocation = getSourceLocation(prop?.declarations?.at(0)) ?? currentLocation;
@@ -521,6 +552,8 @@ const convertTypeToAST = (
       return propertyNode;
     });
 
+    const interfaceName = interfaceType.symbol.getName();
+    
     const interfaceTypeNode = typeAST as InterfaceTypeNode;
     interfaceTypeNode.kind = 'interface';
     interfaceTypeNode.name = interfaceName;

@@ -99,26 +99,18 @@ const calculateImportPath = (node: SourceCodeFragment, outputDir: string, baseDi
     return undefined;
   }
     
-  // Debug logging for TypeScript API types
-  if (node.sourceLocation.packageName === 'typescript') {
-    console.log(`\n=== calculateImportPath Debug ===`);
-    console.log(`Package: ${node.sourceLocation.packageName}`);
-    console.log(`FileName: ${node.sourceLocation.fileName}`);
-    console.log(`Lib pattern match: ${!!node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)}`);
-  }
-  
-  // Ignore import path if the source file is primitive and/or inside of TypeScript runtime library types.
-  if (node.sourceLocation.packageName === 'typescript' &&
+  // When package name is available
+  if (node.sourceLocation.packageName) {
+    // Ignore import path if the source file is primitive and/or inside of TypeScript runtime library types.
     // 'lib.d.ts'
     // 'lib.es2022.d.ts'
     // 'lib.foo.bar.d.ts'
-    node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)) {
-    console.log(`Ignoring lib.d.ts file`);
-    return undefined;
-  }
-
-  // When package name is available, use it as the import path
-  if (node.sourceLocation.packageName) {
+    // ...
+    if (node.sourceLocation.packageName === 'typescript' &&
+      node.sourceLocation.fileName.match(/lib\.([\w\.])*d\.ts$/)) {
+      return undefined;
+    }
+    // Use it as the import path
     return node.sourceLocation.packageName;
   }
 
@@ -181,15 +173,23 @@ const setImportPathMap = (name: string, node: TypeAST, outputDir: string, baseDi
  * @param importPathMap - The import path map
  */
 const traverseAndGetImportPathMaps = (
-  node: TypeAST, outputDir: string, baseDir: string | undefined, importPathMap: Map<string, Set<string>>) => {
+  node: TypeAST, outputDir: string, baseDir: string | undefined,
+  visitedNodes: Set<TypeAST>, importPathMap: Map<string, Set<string>>) => {
+
+  // When the node is already visited, skip it
+  if (visitedNodes.has(node)) {
+    return;
+  }
+  visitedNodes.add(node);
+
   switch (node.kind) {
     // Type reference
     case 'type-reference': {
-      traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, visitedNodes, importPathMap);
       // Traverse type arguments when available
       if (node.typeArguments) {
         for (const typeArgument of node.typeArguments) {
-          traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, importPathMap);
+          traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, visitedNodes, importPathMap);
         }
       }
       break;
@@ -207,44 +207,48 @@ const traverseAndGetImportPathMaps = (
     }
     // Array
     case 'array': {
-      traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, visitedNodes, importPathMap);
       break;
     }
     // Interface
     case 'interface': {
       setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
-      // Traverse properties
-      for (const property of node.properties) {
-        traverseAndGetImportPathMaps(property.type, outputDir, baseDir, importPathMap);
-      }
       // Traverse type parameters when available
       if (node.typeParameters) {
         for (const typeParameter of node.typeParameters) {
-          traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, importPathMap);
+          traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, visitedNodes, importPathMap);
         }
+      }
+      break;
+    }
+    // (Anonymous) Object
+    case 'object': {
+      // Traverse properties
+      for (const property of node.properties) {
+        traverseAndGetImportPathMaps(property.type, outputDir, baseDir, visitedNodes, importPathMap);
       }
       break;
     }
     // Function
     case 'function': {
       // Traverse return type
-      traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, visitedNodes, importPathMap);
       // Traverse parameters
       for (const param of node.parameters) {
-        traverseAndGetImportPathMaps(param.type, outputDir, baseDir, importPathMap);
+        traverseAndGetImportPathMaps(param.type, outputDir, baseDir, visitedNodes, importPathMap);
       }
       break;
     }
     // Type OR expression
     case 'or': {
-      traverseAndGetImportPathMaps(node.left, outputDir, baseDir, importPathMap);
-      traverseAndGetImportPathMaps(node.right, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.left, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.right, outputDir, baseDir, visitedNodes, importPathMap);
       break;
     }
     // Type AND expression
     case 'and': {
-      traverseAndGetImportPathMaps(node.left, outputDir, baseDir, importPathMap);
-      traverseAndGetImportPathMaps(node.right, outputDir, baseDir, importPathMap);
+      traverseAndGetImportPathMaps(node.left, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.right, outputDir, baseDir, visitedNodes, importPathMap);
       break;
     }
     // Unknown types
@@ -286,6 +290,7 @@ const getImportDescriptorList = (
   includeFunctionAndExceptChildren: boolean, includeDeclaredType: boolean): ImportDescriptor[] => {
 
   const importPathMap = new Map<string, Set<string>>();
+  const visitedNodes = new Set<TypeAST>();
 
   for (const functions of namespaceGroups.values()) {
     for (const functionInfo of functions) {
@@ -299,7 +304,8 @@ const getImportDescriptorList = (
         }
 
         if (!includeFunctionAndExceptChildren) {
-          traverseAndGetImportPathMaps(functionInfo.type, outputDir, baseDir, importPathMap);
+          traverseAndGetImportPathMaps(
+            functionInfo.type, outputDir, baseDir, visitedNodes, importPathMap);
         }
 
         switch (functionInfo.kind) {
@@ -314,10 +320,8 @@ const getImportDescriptorList = (
           // Add the class name to the import path map
           // `import { ClassName } from 'path';`
           case 'class-method': {
-            // traverseAndGetImportPathMaps(functionInfo.declaredType, outputDir, baseDir, importPathMap);
-            if (includeDeclaredType) {
-              memberNames.add(functionInfo.declaredType!.typeString);
-            }
+            traverseAndGetImportPathMaps(
+              functionInfo.declaredType!, outputDir, baseDir, visitedNodes, importPathMap);
             break;
           }
           // Add the function name to the import path map
