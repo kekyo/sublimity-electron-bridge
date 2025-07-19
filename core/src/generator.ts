@@ -320,8 +320,10 @@ const getImportDescriptorList = (
           // Add the class name to the import path map
           // `import { ClassName } from 'path';`
           case 'class-method': {
-            traverseAndGetImportPathMaps(
-              functionInfo.declaredType!, outputDir, baseDir, visitedNodes, importPathMap);
+            if (includeDeclaredType) {
+              traverseAndGetImportPathMaps(
+                functionInfo.declaredType!, outputDir, baseDir, visitedNodes, importPathMap);
+            }
             break;
           }
           // Add the function name to the import path map

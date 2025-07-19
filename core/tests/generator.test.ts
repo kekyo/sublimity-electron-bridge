@@ -1098,7 +1098,6 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
 // Do not edit manually this file.
 
 import { CompilerOptions, Node, Program, SourceFile, SyntaxKind } from 'typescript';
-import { TypeScriptService } from './external-import-base/src/services/TypeScriptService';
 
 export interface __mainProcessType {
   readonly getNodeKind: (node: Node) => Promise<SyntaxKind>;
