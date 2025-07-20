@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
 import { promises as fs } from 'fs';
-import { version } from './generated/packageMetadata.ts';
+import { author, license, repository_url, version } from './generated/packageMetadata.ts';
 
 // Create the program
 const program = new Command();
@@ -14,9 +14,9 @@ program
   .version(version)
   .description(`Sublimity Electron IPC bridge CLI [${version}]`)
   .addHelpText('after', `
-Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
-Repository: https://github.com/kekyo/sublimity-electron-bridge
-License: MIT
+Copyright (c) ${author}
+Repository: ${repository_url}
+License: ${license}
 `);
 
 // Add the generate command

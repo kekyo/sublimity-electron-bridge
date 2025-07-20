@@ -170,11 +170,12 @@ const setImportPathMap = (name: string, node: TypeAST, outputDir: string, baseDi
  * @param node - The node to traverse
  * @param outputDir - The output directory
  * @param baseDir - The base directory
- * @param importPathMap - The import path map
+ * @param importTypePathMap - The import type path map
  */
 const traverseAndGetImportPathMaps = (
   node: TypeAST, outputDir: string, baseDir: string | undefined,
-  visitedNodes: Set<TypeAST>, importPathMap: Map<string, Set<string>>) => {
+  visitedNodes: Set<TypeAST>,
+  importTypePathMap: Map<string, Set<string>>) => {
 
   // When the node is already visited, skip it
   if (visitedNodes.has(node)) {
@@ -185,48 +186,48 @@ const traverseAndGetImportPathMaps = (
   switch (node.kind) {
     // Type reference
     case 'type-reference': {
-      traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.referencedType, outputDir, baseDir, visitedNodes, importTypePathMap);
       // Traverse type arguments when available
       if (node.typeArguments) {
         for (const typeArgument of node.typeArguments) {
-          traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, visitedNodes, importPathMap);
+          traverseAndGetImportPathMaps(typeArgument, outputDir, baseDir, visitedNodes, importTypePathMap);
         }
       }
       break;
     }
     // Type alias
     case 'type-alias': {
-      setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
+      setImportPathMap(node.name, node, outputDir, baseDir, importTypePathMap);
       // Traverse type arguments when available
       if (node.typeArguments) {
         for (const typeArgument of node.typeArguments) {
-          setImportPathMap(typeArgument.typeString, typeArgument, outputDir, baseDir, importPathMap);
+          setImportPathMap(typeArgument.typeString, typeArgument, outputDir, baseDir, importTypePathMap);
         }
       }
       break;
     }
     // Enum
     case 'enum': {
-      setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
+      setImportPathMap(node.name, node, outputDir, baseDir, importTypePathMap);
       break;
     }
     // Enum value
     case 'enum-value': {
-      traverseAndGetImportPathMaps(node.underlyingType, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.underlyingType, outputDir, baseDir, visitedNodes, importTypePathMap);
       break;
     }
     // Array
     case 'array': {
-      traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.elementType, outputDir, baseDir, visitedNodes, importTypePathMap);
       break;
     }
     // Interface
     case 'interface': {
-      setImportPathMap(node.name, node, outputDir, baseDir, importPathMap);
+      setImportPathMap(node.name, node, outputDir, baseDir, importTypePathMap);
       // Traverse type parameters when available
       if (node.typeParameters) {
         for (const typeParameter of node.typeParameters) {
-          traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, visitedNodes, importPathMap);
+          traverseAndGetImportPathMaps(typeParameter, outputDir, baseDir, visitedNodes, importTypePathMap);
         }
       }
       break;
@@ -235,37 +236,37 @@ const traverseAndGetImportPathMaps = (
     case 'object': {
       // Traverse properties
       for (const property of node.properties) {
-        traverseAndGetImportPathMaps(property.type, outputDir, baseDir, visitedNodes, importPathMap);
+        traverseAndGetImportPathMaps(property.type, outputDir, baseDir, visitedNodes, importTypePathMap);
       }
       break;
     }
     // Function
     case 'function': {
       // Traverse return type
-      traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, visitedNodes, importPathMap);
+      traverseAndGetImportPathMaps(node.returnType, outputDir, baseDir, visitedNodes, importTypePathMap);
       // Traverse parameters
       for (const param of node.parameters) {
-        traverseAndGetImportPathMaps(param.type, outputDir, baseDir, visitedNodes, importPathMap);
+        traverseAndGetImportPathMaps(param.type, outputDir, baseDir, visitedNodes, importTypePathMap);
       }
       break;
     }
     // Type OR expression
     case 'or': {
       for (const arg of node.args) {
-        traverseAndGetImportPathMaps(arg, outputDir, baseDir, visitedNodes, importPathMap);
+        traverseAndGetImportPathMaps(arg, outputDir, baseDir, visitedNodes, importTypePathMap);
       }
       break;
     }
     // Type AND expression
     case 'and': {
       for (const arg of node.args) {
-        traverseAndGetImportPathMaps(arg, outputDir, baseDir, visitedNodes, importPathMap);
+        traverseAndGetImportPathMaps(arg, outputDir, baseDir, visitedNodes, importTypePathMap);
       }
       break;
     }
     // Unknown types
     case 'unknown': {
-      setImportPathMap(node.typeString, node, outputDir, baseDir, importPathMap);
+      setImportPathMap(node.typeString, node, outputDir, baseDir, importTypePathMap);
       break;
     }
 
@@ -279,6 +280,10 @@ const traverseAndGetImportPathMaps = (
  */
 interface ImportDescriptor {
   /**
+   * Whether the import is a type import
+   */
+  readonly isType: boolean;
+  /**
    * The path to the import
    */
   readonly path: string;
@@ -287,6 +292,29 @@ interface ImportDescriptor {
    */
   readonly memberNames: string[];
 }
+
+/**
+ * Convert the import path map to the import descriptor list
+ * @param importPathMap - The import path map
+ * @param isType - Whether the import is a type import
+ * @returns The import descriptor list
+ */
+const toImportDescriptorList = (importPathMap: Map<string, Set<string>>, isType: boolean) => {
+  return Array.from(importPathMap.entries()).
+    // Filter out import paths that do not have any member names
+    filter(([_, memberNames]) => memberNames.size >= 1).
+    // Sort member names to ensure deterministic order
+    map(([path, memberNames]) => {
+      const importDescriptor: ImportDescriptor = {
+        isType,
+        path,
+        memberNames: Array.from(memberNames).sort()
+      };
+      return importDescriptor;
+    }).
+    // Sort import paths to ensure deterministic order
+    sort((a, b) => a.path.localeCompare(b.path));
+};
 
 /**
  * Get the import descriptor list for the given namespace groups
@@ -299,9 +327,11 @@ interface ImportDescriptor {
  */
 const getImportDescriptorList = (
   namespaceGroups: Map<string, FunctionInfo[]>, outputDir: string, baseDir: string | undefined,
-  includeFunctionAndExceptChildren: boolean, includeDeclaredType: boolean): ImportDescriptor[] => {
+  includeFunctionAndExceptChildren: boolean, includeDeclaredType: boolean):
+  [imports: ImportDescriptor[], importTypes: ImportDescriptor[]] => {
 
   const importPathMap = new Map<string, Set<string>>();
+  const importTypePathMap = new Map<string, Set<string>>();
   const visitedNodes = new Set<TypeAST>();
 
   for (const functions of namespaceGroups.values()) {
@@ -317,7 +347,7 @@ const getImportDescriptorList = (
 
         if (!includeFunctionAndExceptChildren) {
           traverseAndGetImportPathMaps(
-            functionInfo.type, outputDir, baseDir, visitedNodes, importPathMap);
+            functionInfo.type, outputDir, baseDir, visitedNodes, importTypePathMap);
         }
 
         switch (functionInfo.kind) {
@@ -350,17 +380,11 @@ const getImportDescriptorList = (
     }
   }
 
-  return Array.from(importPathMap.entries()).
-    // Filter out import paths that do not have any member names
-    filter(([_, memberNames]) => memberNames.size >= 1).
-    // Sort member names to ensure deterministic order
-    map(([path, memberNames]) => ({
-      path,
-      memberNames: Array.from(memberNames).sort()
-    })).
-    // Sort import paths to ensure deterministic order
-    sort((a, b) => a.path.localeCompare(b.path));
-}
+  return [
+    toImportDescriptorList(importPathMap, false),
+    toImportDescriptorList(importTypePathMap, true)
+  ];
+};
 
 /**
  * Singleton instance descriptor
@@ -467,11 +491,13 @@ const generateMainHandlers = (
   baseDir: string | undefined): string => {
 
   // Generate import declarations
-  const importDescriptors = getImportDescriptorList(
+  const [importDescriptors, importTypeDescriptors] = getImportDescriptorList(
     namespaceGroups, outputDir, baseDir, true, true);
+  const importTypeDeclarations = importTypeDescriptors.map(
+    ({ path, memberNames }) => `import type { ${memberNames.join(', ')} } from '${path}';`);
   const importDeclarations = importDescriptors.map(
     ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
-
+  
   // Generate singleton instance declarations
   const singletonInstanceDescriptors = getSingletonInstanceDescriptorList(namespaceGroups);
   const signletonInstanceDeclarations = singletonInstanceDescriptors.map(
@@ -482,12 +508,13 @@ const generateMainHandlers = (
   const registrations = registrationDescriptors.map(
     ({ functionId, functionName }) => `controller.register('${functionId}', ${functionName});`);
 
-  return [
+  const mainBodyLines = [
     "// This is auto-generated main process handler by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
     "import { ipcMain } from 'electron';",
-    "import { createSublimityRpcController } from 'sublimity-rpc';",
+    "import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';",
+    ...importTypeDeclarations,
     ...importDeclarations,
     '',
     '// Create singleton instances',
@@ -495,21 +522,23 @@ const generateMainHandlers = (
     '',
     '// Create RPC controller',
     'const controller = createSublimityRpcController({',
-    '  onSendMessage: message => {',
+    '  onSendMessage: (message: SublimityRpcMessage) => {',
     '    // Send message to preload process',
     '    global.mainWindow.webContents.send("rpc-message", message);',
     '  }',
     '});',
     '',
     '// Handle messages from preload process',
-    'ipcMain.on("rpc-message", (_, message) => {',
+    'ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {',
     '  controller.insertMessage(message);',
     '});',
     '',
     '// Register RPC functions',
     ...registrations,
     ''
-  ].join('\n');
+  ].filter(line => line !== null);
+
+  return mainBodyLines.join('\n');
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -545,42 +574,58 @@ const getPreloadBridgeDescriptorList = (namespaceGroups: Map<string, FunctionInf
 /**
  * Generate the preload bridge
  * @param namespaceGroups - The grouped methods
- * @param channelPrefix - Channel prefix
+ * @param outputDir - The output directory
+ * @param baseDir - Base directory for resolving relative paths
  * @returns The generated code
  * @remarks This function generates the preload bridge for the exposed methods.
  */
 const generatePreloadBridge = (
-  namespaceGroups: Map<string, FunctionInfo[]>): string => {
+  namespaceGroups: Map<string, FunctionInfo[]>,
+  outputDir: string,
+  baseDir: string | undefined): string => {
+
+  // Generate import declarations
+  const [_, importTypeDescriptors] = getImportDescriptorList(
+    namespaceGroups, outputDir, baseDir, false, false);
+  const importTypeDeclarations = importTypeDescriptors.map(
+    ({ path, memberNames }) => `import type { ${memberNames.join(', ')} } from '${path}';`);
 
   // Generate preload bridge declarations
   const preloadBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
   const preloadBridgeDeclarations = preloadBridgeDescriptors.map(({ ipcNamespace, functions }) => {
     const functionsCode = functions.map(functionInfo => {
       const args = functionInfo.type.parameters.map(p => p.name).join(', ');
-      const params = functionInfo.type.parameters.length === 1 ? args : `(${args})`;
+      const params = `(${functionInfo.type.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ')})`;
       const functionId = `${ipcNamespace}:${functionInfo.name}`;
-      return `  ${functionInfo.name}: ${params} => controller.invoke('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
+      const returnType = functionInfo.type.returnType;
+      const unwrappedReturnType = // Unwrap Promise<T> generic parameter
+        (returnType.kind === 'type-reference' &&
+         returnType.referencedType.kind === 'interface' &&
+         returnType.referencedType.name === 'Promise') ?
+          (returnType.typeArguments?.at(0) ?? returnType) : returnType;
+      return `  ${functionInfo.name}: ${params} => controller.invoke<${unwrappedReturnType.typeString}>('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
     }).join(',\n');
     return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
   });
 
-  const result = [
+  const preloadBodyLines = [
     "// This is auto-generated preloader by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
     "import { contextBridge, ipcRenderer } from 'electron';",
-    "import { createSublimityRpcController } from 'sublimity-rpc';",
+    "import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';",
+    ...importTypeDeclarations,
     '',
     '// Create RPC controller',
     'const controller = createSublimityRpcController({',
-    '  onSendMessage: message => {',
+    '  onSendMessage: (message: SublimityRpcMessage) => {',
     '    // Send message to main process',
     '    ipcRenderer.send("rpc-message", message);',
     '  }',
     '});',
     '',
     '// Handle messages from main process',
-    'ipcRenderer.on("rpc-message", (_, message) => {',
+    'ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {',
     '  controller.insertMessage(message);',
     '});',
     '',
@@ -589,7 +634,7 @@ const generatePreloadBridge = (
     ''
   ].filter(line => line !== null);
 
-  return result.join('\n');
+  return preloadBodyLines.join('\n');
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -642,8 +687,10 @@ const generateTypeDefinitions = (
   baseDir: string | undefined): string => {
   
   // Generate import declarations
-  const importDescriptors = getImportDescriptorList(
+  const [importDescriptors, importTypeDescriptors] = getImportDescriptorList(
     namespaceGroups, outputDir, baseDir, false, false);
+  const importTypeDeclarations = importTypeDescriptors.map(
+    ({ path, memberNames }) => `import type { ${memberNames.join(', ')} } from '${path}';`);
   const importDeclarations = importDescriptors.map(
     ({ path, memberNames }) => `import { ${memberNames.join(', ')} } from '${path}';`);
 
@@ -662,14 +709,15 @@ const generateTypeDefinitions = (
     return `    readonly ${ipcNamespace}: ${typeName};`;   // Properties in window object
   });
 
-  const result = [
+  const typeDefsBodyLines = [
     "// This is auto-generated type definitions by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
-    '',
+    (importDeclarations.length >= 1 || importTypeDeclarations.length >= 1) ? '' : null,
+    ...importTypeDeclarations,
     ...importDeclarations,
-    importDeclarations.length >= 1 ? '' : null,
+    (rendererTypeDeclarations.length >= 1) ? '' : null,
     ...rendererTypeDeclarations,
-    rendererTypeDeclarations.length >= 1 ? '' : null,
+    '',
     'declare global {',
     '  interface Window {',
     ...windowProperties,
@@ -678,9 +726,9 @@ const generateTypeDefinitions = (
     '',
     'export {}',
     ''
-  ].filter(line => line !== null).join('\n');
+  ].filter(line => line !== null);
   
-  return result;
+  return typeDefsBodyLines.join('\n');
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -830,7 +878,7 @@ export const createElectronBridgeGenerator =
 
     // Generate preload bridge
     const preloadFilePath = resolve(baseDir!, preloadHandlerFile);
-    const preloadBridgeCode = generatePreloadBridge(namespaceGroups);
+    const preloadBridgeCode = generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
 
     // Generate type definitions
     const typeDefsFilePath = resolve(baseDir!, typeDefinitionsFile);

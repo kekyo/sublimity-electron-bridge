@@ -912,19 +912,19 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
 
 /**
  * Load the TypeScript configuration object from a file or from an object
- * @param tsConfigPath Path to the tsconfig.json file
+ * @param tsConfig tsconfig.json file path or object. (default: search and read tsconfig.json file)
  * @returns TypeScript configuration object
  */
-export const loadTsConfig = (tsConfig: string | any, baseDir: string): any => {
-  if (typeof tsConfig === 'string') {
-    const tsConfigPath = resolve(baseDir, tsConfig);
+export const loadTsConfig = (tsConfig: string | any | undefined, baseDir: string): any => {
+  if (!tsConfig || typeof tsConfig === 'string') {
+    const tsConfigPath = tsConfig ? resolve(baseDir, tsConfig) : baseDir;
     const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
     if (!configPath) {
       throw new Error(`tsconfig.json not found in ${tsConfigPath}`);
     }
-    const configFile = ts.readConfigFile(tsConfigPath, ts.sys.readFile);
+    const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     if (!configFile.config) {
-      throw new Error(`Failed to load TypeScript configuration from ${tsConfigPath}: ${configFile.error}`);
+      throw new Error(`Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
     }
     return configFile.config;
   }
