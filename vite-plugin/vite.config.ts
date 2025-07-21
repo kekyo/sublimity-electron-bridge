@@ -1,18 +1,16 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import dts from 'vite-plugin-dts';
-import { readFileSync } from 'fs';
-
-// Read version from package.json
-const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
+import screwUp from 'screw-up';
 
 export default defineConfig({
-  define: {
-    __VERSION__: JSON.stringify(packageJson.version)
-  },
-  plugins: [dts({
-    rollupTypes: true
-  })],
+  plugins: [
+    dts({
+      rollupTypes: true
+    }),
+    screwUp({
+      outputMetadataFile: true
+    })],
   build: {
     lib: {
       entry: {
@@ -25,7 +23,7 @@ export default defineConfig({
     },
     target: 'node14',
     rollupOptions: {
-      external: ['vite', 'path', 'fs', 'typescript', 'crypto', 'worker_threads', 'glob', 'url', 'module', 'chokidar']
+      external: ['vite', 'path', 'fs', 'fs/promises', 'typescript', 'crypto', 'worker_threads', 'glob', 'url', 'module', 'chokidar']
     }
   }
 });

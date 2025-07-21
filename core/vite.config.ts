@@ -1,23 +1,25 @@
-import { defineConfig } from 'vite'
-import { resolve } from 'path'
-import dts from 'vite-plugin-dts'
+import { defineConfig } from 'vite';
+import { resolve } from 'path';
+import dts from 'vite-plugin-dts';
+import screwUp from 'screw-up';
 
 export default defineConfig({
-  plugins: [dts()],
+  plugins: [
+    dts({
+      rollupTypes: true
+    }),
+    screwUp()
+  ],
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'ElectronBridgeCore',
-      fileName: 'index',
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'js'}`,
       formats: ['es', 'cjs']
     },
     target: 'node14',
     rollupOptions: {
-      external: ['typescript', 'path', 'fs', 'crypto']
+      external: ['typescript', 'path', 'fs', 'fs/promises', 'crypto']
     }
-  },
-  test: {
-    globals: true,
-    environment: 'node'
   }
 });

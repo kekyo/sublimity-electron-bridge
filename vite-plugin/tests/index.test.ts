@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { sublimityElectronBridge } from './index'
 import { mkdtempSync, readFileSync, existsSync, rmSync, cpSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { sublimityElectronBridge } from '../src/index'
 
 describe('SublimityElectronBridge Vite Plugin', () => {
   let tempDir: string;
@@ -11,17 +11,39 @@ describe('SublimityElectronBridge Vite Plugin', () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'vite-plugin-test-'));
     testFixturesDir = join(tempDir, 'test-fixtures');
-    
+
     // Create test-fixtures directory but don't copy files yet
     // Files will be copied selectively by individual tests
     if (!existsSync(testFixturesDir)) {
       mkdirSync(testFixturesDir, { recursive: true });
     }
+
+    // Create tsconfig.json for the new extractor to work
+    const tsConfig = {
+      compilerOptions: {
+        target: 'ES2020',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+        allowJs: true,
+        strict: true,
+        skipLibCheck: true,
+        forceConsistentCasingInFileNames: true,
+        resolveJsonModule: true,
+        isolatedModules: true,
+        noEmit: true
+      },
+      include: ['**/*.ts', '**/*.tsx'],
+      exclude: ['node_modules', 'dist']
+    };
+
+    writeFileSync(join(tempDir, 'tsconfig.json'), JSON.stringify(tsConfig, null, 2));
   });
 
   // Helper function to copy specific test fixtures
   const copyTestFixtures = (filenames: string[]) => {
-    const sourceFixtures = join(__dirname, 'test-fixtures');
+    const sourceFixtures = join(__dirname, '..', 'src', 'test-fixtures');
     filenames.forEach(filename => {
       const sourcePath = join(sourceFixtures, filename);
       const targetPath = join(testFixturesDir, filename);
@@ -39,7 +61,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
 
   it('should create plugin with default options', () => {
     const plugin = sublimityElectronBridge();
-    
+
     expect(plugin).toBeDefined();
     expect(plugin.name).toBe('sublimity-electron-bridge');
   });
@@ -47,7 +69,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
   it('should generate files when processing source files', async () => {
     // Copy all test fixtures for this test
     copyTestFixtures(['FileService.ts', 'database.ts']);
-    
+
     const plugin = sublimityElectronBridge({
       mainProcessHandlerFile: join('main', 'ipc-handlers.ts'),
       preloadHandlerFile: join('preload', 'bridge.ts'),
@@ -78,91 +100,123 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     expect(existsSync(join(tempDir, 'types', 'electron.d.ts'))).toBe(true);
 
     // Verify complete content of generated files
-    
+
     // Main handlers file (based on actual output order)
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { executeCommand, getVersion, queryDatabase } from '../test-fixtures/database';
 import { FileService } from '../test-fixtures/FileService';
-import { executeCommand } from '../test-fixtures/database';
-import { getVersion } from '../test-fixtures/database';
-import { queryDatabase } from '../test-fixtures/database';
 
 // Create singleton instances
-const fileserviceInstance = new FileService();
+const __FileServiceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('databaseAPI:executeCommand', executeCommand);
+controller.register('databaseAPI:queryDatabase', queryDatabase);
+controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
+controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
+controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
+controller.register('mainProcess:getVersion', getVersion);
 `;
-    
+
     expect(mainHandlers).toBe(expectedMainHandlers);
-    
+
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
     const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => controller.invoke<number>('databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => controller.invoke<any[]>('databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
+  readFile: (path: string) => controller.invoke<string>('fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke<void>('fileAPI:writeFile', path, content)
+});
+contextBridge.exposeInMainWorld('fileService', {
+  deleteFile: (path: string) => controller.invoke<boolean>('fileService:deleteFile', path)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
+  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
-    
+
     expect(preloadBridge).toBe(expectedPreloadBridge);
-    
+
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-interface DatabaseAPI {
-  executeCommand(command: string): Promise<number>;
-  queryDatabase(sql: string): Promise<any[]>;
+export interface __databaseAPIType {
+  readonly executeCommand: (command: string) => Promise<number>;
+  readonly queryDatabase: (sql: string) => Promise<any[]>;
 }
-interface FileAPI {
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
+export interface __fileAPIType {
+  readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
 }
-interface MainProcess {
-  deleteFile(path: string): Promise<boolean>;
-  getVersion(): Promise<string>;
+export interface __fileServiceType {
+  readonly deleteFile: (path: string) => Promise<boolean>;
+}
+export interface __mainProcessType {
+  readonly getVersion: () => Promise<string>;
 }
 
 declare global {
   interface Window {
-    databaseAPI: DatabaseAPI;
-    fileAPI: FileAPI;
-    mainProcess: MainProcess;
+    readonly databaseAPI: __databaseAPIType;
+    readonly fileAPI: __fileAPIType;
+    readonly fileService: __fileServiceType;
+    readonly mainProcess: __mainProcessType;
   }
 }
 
 export {}
 `;
-    
+
     expect(typeDefs).toBe(expectedTypeDefs);
   })
 
   it('should generate files when using worker threads', async () => {
     // Copy all test fixtures for this test
     copyTestFixtures(['FileService.ts', 'database.ts']);
-    
+
     const plugin = sublimityElectronBridge({
       mainProcessHandlerFile: join(tempDir, 'main', 'ipc-handlers.ts'),
       preloadHandlerFile: join(tempDir, 'preload', 'bridge.ts'),
@@ -194,84 +248,116 @@ export {}
     expect(existsSync(join(tempDir, 'types', 'electron.d.ts'))).toBe(true);
 
     // Verify complete content of generated files (should be identical to direct processing)
-    
+
     // Main handlers file
     const mainHandlers = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { executeCommand, getVersion, queryDatabase } from '../test-fixtures/database';
 import { FileService } from '../test-fixtures/FileService';
-import { executeCommand } from '../test-fixtures/database';
-import { getVersion } from '../test-fixtures/database';
-import { queryDatabase } from '../test-fixtures/database';
 
 // Create singleton instances
-const fileserviceInstance = new FileService();
+const __FileServiceInstance = new FileService();
 
-// Register IPC handlers
-ipcMain.handle('seb:databaseAPI:executeCommand', (_, command) => executeCommand(command));
-ipcMain.handle('seb:databaseAPI:queryDatabase', (_, sql) => queryDatabase(sql));
-ipcMain.handle('seb:fileAPI:readFile', (_, path) => fileserviceInstance.readFile(path));
-ipcMain.handle('seb:fileAPI:writeFile', (_, path, content) => fileserviceInstance.writeFile(path, content));
-ipcMain.handle('seb:mainProcess:deleteFile', (_, path) => fileserviceInstance.deleteFile(path));
-ipcMain.handle('seb:mainProcess:getVersion', (_) => getVersion());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('databaseAPI:executeCommand', executeCommand);
+controller.register('databaseAPI:queryDatabase', queryDatabase);
+controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
+controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
+controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
+controller.register('mainProcess:getVersion', getVersion);
 `;
-    
+
     expect(mainHandlers).toBe(expectedMainHandlers);
-    
+
     // Preload bridge file
     const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
     const expectedPreloadBridge = `// This is auto-generated preloader by sublimity-electron-bridge.
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
 contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => ipcRenderer.invoke('seb:databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => ipcRenderer.invoke('seb:databaseAPI:queryDatabase', sql)
+  executeCommand: (command: string) => controller.invoke<number>('databaseAPI:executeCommand', command),
+  queryDatabase: (sql: string) => controller.invoke<any[]>('databaseAPI:queryDatabase', sql)
 });
 contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => ipcRenderer.invoke('seb:fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => ipcRenderer.invoke('seb:fileAPI:writeFile', path, content)
+  readFile: (path: string) => controller.invoke<string>('fileAPI:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke<void>('fileAPI:writeFile', path, content)
+});
+contextBridge.exposeInMainWorld('fileService', {
+  deleteFile: (path: string) => controller.invoke<boolean>('fileService:deleteFile', path)
 });
 contextBridge.exposeInMainWorld('mainProcess', {
-  deleteFile: (path: string) => ipcRenderer.invoke('seb:mainProcess:deleteFile', path),
-  getVersion: () => ipcRenderer.invoke('seb:mainProcess:getVersion')
+  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
-    
+
     expect(preloadBridge).toBe(expectedPreloadBridge);
-    
+
     // Type definitions file
     const typeDefs = readFileSync(join(tempDir, 'types', 'electron.d.ts'), 'utf-8');
     const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-interface DatabaseAPI {
-  executeCommand(command: string): Promise<number>;
-  queryDatabase(sql: string): Promise<any[]>;
+export interface __databaseAPIType {
+  readonly executeCommand: (command: string) => Promise<number>;
+  readonly queryDatabase: (sql: string) => Promise<any[]>;
 }
-interface FileAPI {
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
+export interface __fileAPIType {
+  readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
 }
-interface MainProcess {
-  deleteFile(path: string): Promise<boolean>;
-  getVersion(): Promise<string>;
+export interface __fileServiceType {
+  readonly deleteFile: (path: string) => Promise<boolean>;
+}
+export interface __mainProcessType {
+  readonly getVersion: () => Promise<string>;
 }
 
 declare global {
   interface Window {
-    databaseAPI: DatabaseAPI;
-    fileAPI: FileAPI;
-    mainProcess: MainProcess;
+    readonly databaseAPI: __databaseAPIType;
+    readonly fileAPI: __fileAPIType;
+    readonly fileService: __fileServiceType;
+    readonly mainProcess: __mainProcessType;
   }
 }
 
 export {}
 `;
-    
+
     expect(typeDefs).toBe(expectedTypeDefs);
   });
 
@@ -303,7 +389,7 @@ export {}
     it.each([false, true])('should execute single buildStart request normally with enableWorker: %s', async (enableWorker) => {
       // Copy all test fixtures for this test
       copyTestFixtures(['FileService.ts', 'database.ts']);
-      
+
       const plugin = sublimityElectronBridge({
         enableWorker,
         targetDir: testFixturesDir
@@ -323,7 +409,7 @@ export {}
     it.each([false, true])('should handle 2 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
       // Copy all test fixtures for this test
       copyTestFixtures(['FileService.ts', 'database.ts']);
-      
+
       const plugin = sublimityElectronBridge({
         enableWorker,
         targetDir: testFixturesDir
@@ -350,7 +436,7 @@ export {}
     it.each([false, true])('should handle 3 concurrent buildStart requests efficiently with enableWorker: %s', async (enableWorker) => {
       // Copy all test fixtures for this test
       copyTestFixtures(['FileService.ts', 'database.ts']);
-      
+
       const plugin = sublimityElectronBridge({
         enableWorker,
         targetDir: testFixturesDir
@@ -378,7 +464,7 @@ export {}
     it.each([false, true])('should handle rapid sequential requests without blocking with enableWorker: %s', async (enableWorker) => {
       // Copy all test fixtures for this test
       copyTestFixtures(['FileService.ts', 'database.ts']);
-      
+
       const plugin = sublimityElectronBridge({
         enableWorker,
         targetDir: testFixturesDir
@@ -415,7 +501,7 @@ export {}
     it.each([false, true])('should handle sequential requests after completion with enableWorker: %s', async (enableWorker) => {
       // Copy all test fixtures for this test
       copyTestFixtures(['FileService.ts', 'database.ts']);
-      
+
       const plugin = sublimityElectronBridge({
         enableWorker,
         targetDir: testFixturesDir
@@ -477,10 +563,24 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
 // Create singleton instances
 
-// Register IPC handlers
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
 `;
 
       const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -506,13 +606,27 @@ import { ipcMain } from 'electron';
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { WatcherTest } from '../test-fixtures/WatcherTest';
 
 // Create singleton instances
-const watchertestInstance = new WatcherTest();
+const __WatcherTestInstance = new WatcherTest();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:normalMethod', (_) => watchertestInstance.normalMethod());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('watcherTest:normalMethod', __WatcherTestInstance.normalMethod);
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -522,9 +636,24 @@ ipcMain.handle('seb:mainProcess:normalMethod', (_) => watchertestInstance.normal
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-contextBridge.exposeInMainWorld('mainProcess', {
-  normalMethod: () => ipcRenderer.invoke('seb:mainProcess:normalMethod')
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
+contextBridge.exposeInMainWorld('watcherTest', {
+  normalMethod: () => controller.invoke<string>('watcherTest:normalMethod')
 });
 `;
 
@@ -534,13 +663,13 @@ contextBridge.exposeInMainWorld('mainProcess', {
       const expectedTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-interface MainProcess {
-  normalMethod(): Promise<string>;
+export interface __watcherTestType {
+  readonly normalMethod: () => Promise<string>;
 }
 
 declare global {
   interface Window {
-    mainProcess: MainProcess;
+    readonly watcherTest: __watcherTestType;
   }
 }
 
@@ -584,13 +713,27 @@ export {}
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { WatcherTest2 } from '../test-fixtures/WatcherTest2';
 
 // Create singleton instances
-const watchertest2Instance = new WatcherTest2();
+const __WatcherTest2Instance = new WatcherTest2();
 
-// Register IPC handlers
-ipcMain.handle('seb:mainProcess:decoratedMethod', (_) => watchertest2Instance.decoratedMethod());
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
+controller.register('watcherTest2:decoratedMethod', __WatcherTest2Instance.decoratedMethod);
 `;
 
       const generatedFilesWithDecorator = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -613,10 +756,24 @@ ipcMain.handle('seb:mainProcess:decoratedMethod', (_) => watchertest2Instance.de
 // Do not edit manually this file.
 
 import { ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
 // Create singleton instances
 
-// Register IPC handlers
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to preload process
+    global.mainWindow.webContents.send("rpc-message", message);
+  }
+});
+
+// Handle messages from preload process
+ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Register RPC functions
 `;
 
       const generatedFilesEmpty = readFileSync(join(tempDir, 'main', 'ipc-handlers.ts'), 'utf-8');
@@ -626,7 +783,22 @@ import { ipcMain } from 'electron';
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
+// Create RPC controller
+const controller = createSublimityRpcController({
+  onSendMessage: (message: SublimityRpcMessage) => {
+    // Send message to main process
+    ipcRenderer.send("rpc-message", message);
+  }
+});
+
+// Handle messages from main process
+ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to main process
 `;
 
       const preloadBridge = readFileSync(join(tempDir, 'preload', 'bridge.ts'), 'utf-8');
@@ -634,7 +806,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 
       const expectedEmptyTypeDefs = `// This is auto-generated type definitions by sublimity-electron-bridge.
 // Do not edit manually this file.
-
 
 declare global {
   interface Window {

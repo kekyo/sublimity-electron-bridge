@@ -1,14 +1,7 @@
 {
   "name": "sublimity-electron-bridge-cli",
-  "version": "0.14.4",
-  "description": "Electron bridge generator for automatic IPC setup",
-  "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kekyo/sublimity-electron-bridge.git"
-  },
-  "homepage": "https://github.com/kekyo/sublimity-electron-bridge#readme",
+  "version": "0.15.15",
+  "description": "Electron bridge generator for automatic IPC setup (CLI)",
   "keywords": [
     "electron",
     "ipc",
@@ -25,22 +18,20 @@
     "dist"
   ],
   "scripts": {
-    "build": "rv --npm . && npm i && vite build",
-    "dev": "rv --npm . && npm i && vite build --watch",
-    "test": "rv --npm . && npm i && vitest run",
-    "test:ui": "rv --npm . && npm i && vitest --ui",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "build": "rv --npm . && npm i && tsc --noEmit && vite build",
+    "test": "rv --npm . && npm i && tsc --noEmit && vitest run"
   },
-  "dependencies": {
-    "commander": "^11.1.0",
-    "typescript": "^5.8.3"
+  "peerDependencies": {
+    "commander": ">=11.1.0",
+    "sublimity-electron-bridge-core": "file:../core",
+    "typescript": ">=5.0.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.10",
-    "@vitest/ui": "^3.2.4",
-    "typescript": "^5.8.3",
-    "vite": "^7.0.2",
-    "vitest": "^3.2.4"
+    "@types/node": ">=24.0.10",
+    "@vitest/ui": ">=3.2.4",
+    "screw-up": ">=0.8.1",
+    "typescript": ">=5.8.3",
+    "vite": ">=7.0.2",
+    "vitest": ">=3.2.4"
   }
 }

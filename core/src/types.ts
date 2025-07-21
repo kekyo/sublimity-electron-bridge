@@ -1,7 +1,14 @@
+import { FunctionInfo } from "./extractor";
+
 /**
  * Logger interface
  */
 export interface Logger {
+  /**
+   * Log an debug message
+   * @param msg - The message to log
+   */
+  readonly debug: (msg: string) => void;
   /**
    * Log an info message
    * @param msg - The message to log
@@ -24,6 +31,26 @@ export interface Logger {
  */
 export interface ElectronBridgeOptions {
   /**
+   * The logger to use for the generator
+   * @remarks Default: Use the console logger
+   */
+  logger?: Logger;
+  /**
+   * The base directory for the project.
+   * @remarks It is used to generate relative paths for the generated files.
+   */
+  baseDir: string;
+  /**
+   * The TypeScript configuration object or path to the tsconfig.json file
+   * @remarks Default: Use the default TypeScript configuration file from `tsconfig.json` file.
+   */
+  tsConfig?: any | string;
+  /**
+   * The default namespace for the exposed methods
+   * @remarks Default: 'mainProcess'
+   */
+  defaultNamespace?: string;
+  /**
    * The output file path for the main process handlers
    * @remarks Default: 'src/main/generated/seb_main.ts'
    */
@@ -38,56 +65,6 @@ export interface ElectronBridgeOptions {
    * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
    */
   typeDefinitionsFile?: string;
-  /**
-   * The default namespace for the exposed methods
-   * @remarks Default: 'mainProcess'
-   */
-  defaultNamespace?: string;
-  /**
-   * The logger to use for the generator
-   * @remarks Default: Use the console logger
-   */
-  logger?: Logger;
-  /**
-   * The base directory for the project.
-   * @remarks It is used to generate relative paths for the generated files.
-   */
-  baseDir?: string;
-  /**
-   * Channel prefix.
-   * @remarks Default: 'seb'
-   */
-  channelPrefix?: string;
-}
-
-/**
- * Exposed method interface
- */
-export interface ExposedMethod {
-  /**
-   * The class name of the method
-   */
-  readonly className?: string
-  /**
-   * The method name
-   */
-  readonly methodName: string
-  /**
-   * The namespace of the method
-   */
-  readonly namespace: string
-  /**
-   * The parameters of the method
-   */
-  readonly parameters: { name: string; type: string }[]
-  /**
-   * The return type of the method
-   */
-  readonly returnType: string
-  /**
-   * The file path of the method
-   */
-  readonly filePath: string
 }
 
 /**
@@ -95,15 +72,14 @@ export interface ExposedMethod {
  */
 export interface ElectronBridgeGenerator {
   /**
-   * Analyze a file and extract the exposed methods
-   * @param filePath - The path to the file to analyze
-   * @param code - The code of the file to analyze
-   * @returns The exposed methods
+   * Analyze multiple files and extract exposed functions using the new extractor
+   * @param filePaths - Array of file paths to analyze
+   * @returns The exposed functions
    */
-  readonly analyzeFile: (filePath: string, code: string) => ExposedMethod[];
+  readonly analyzeFiles: (filePaths: string[]) => Promise<FunctionInfo[]>;
   /**
-   * Generate the files for the exposed methods
-   * @param methods - The exposed methods
+   * Generate the files for the exposed functions
+   * @param functions - The exposed functions
    */
-  readonly generateFiles: (methods: ExposedMethod[]) => void;
+  readonly generateFiles: (functions: FunctionInfo[]) => Promise<void>;
 }

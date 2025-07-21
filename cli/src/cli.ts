@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { createElectronBridgeGenerator, createConsoleLogger } from '../../core/src/index.ts';
+import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
 import { promises as fs } from 'fs';
-
-// Version is injected at build time by Vite
-declare const __VERSION__: string;
+import { author, license, repository_url, version } from './generated/packageMetadata.ts';
 
 // Create the program
 const program = new Command();
@@ -13,12 +11,12 @@ const program = new Command();
 // Add the name and version
 program
   .name('seb')
-  .version(__VERSION__)
-  .description(`Sublimity Electron IPC bridge CLI [${__VERSION__}]`)
+  .version(version)
+  .description(`Sublimity Electron IPC bridge CLI [${version}]`)
   .addHelpText('after', `
-Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
-Repository: https://github.com/kekyo/sublimity-electron-bridge
-License: MIT
+Copyright (c) ${author}
+Repository: ${repository_url}
+License: ${license}
 `);
 
 // Add the generate command
@@ -50,27 +48,30 @@ program
         typeDefinitionsFile: options.types,
         defaultNamespace: options.namespace,
         logger,
-        baseDir: options.baseDir
+        baseDir: options.baseDir || process.cwd()
       });
 
-      // Read and analyze all files in parallel
-      const analysisPromises = files.map(async (file: string) => {
+      // Check file existence
+      const validFiles: string[] = [];
+      for (const file of files) {
         try {
-          await fs.access(file); // Check file existence
-          const content = await fs.readFile(file, 'utf8');
-          const methods = generator.analyzeFile(file, content);
-          return methods;
+          await fs.access(file);
+          validFiles.push(file);
         } catch (error) {
-          logger.error(`Error analyzing ${file}: ${error instanceof Error ? error.message : error}`);
-          return [];
+          logger.error(`Error accessing ${file}: ${error instanceof Error ? error.message : error}`);
         }
-      });
+      }
 
-      const methodArrays = await Promise.all(analysisPromises);
-      const allMethods = methodArrays.flat();
+      if (validFiles.length === 0) {
+        logger.warn('No valid files found to analyze');
+        return;
+      }
+
+      // Use the new analyzeFiles method for better performance and accuracy
+      const allMethods = await generator.analyzeFiles(validFiles);
 
       // Generate bridge files
-      generator.generateFiles(allMethods);
+      await generator.generateFiles(allMethods);
 
     } catch (error) {
       logger.error(`Error: ${error instanceof Error ? error.message : error}`);

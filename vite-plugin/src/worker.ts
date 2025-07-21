@@ -1,13 +1,13 @@
 import { parentPort, workerData } from 'worker_threads';
 import { promises as fs } from 'fs';
-import { createElectronBridgeGenerator } from '../../core/src/index.ts';
+import { createElectronBridgeGenerator } from 'sublimity-electron-bridge-core';
 
 if (!parentPort) {
   throw new Error('parentPort is not available');
 }
 
 const logger = {
-  trace: (message: string) => parentPort!.postMessage({ type: 'trace', message }),
+  debug: (message: string) => parentPort!.postMessage({ type: 'debug', message }),
   info: (message: string) => parentPort!.postMessage({ type: 'info', message }),
   warn: (message: string) => parentPort!.postMessage({ type: 'warn', message }),
   error: (message: string) => parentPort!.postMessage({ type: 'error', message }),
@@ -19,29 +19,31 @@ const generator = createElectronBridgeGenerator({
   typeDefinitionsFile: workerData.options.typeDefinitionsFile,
   defaultNamespace: workerData.options.defaultNamespace,
   baseDir: workerData.options.baseDir,
-  channelPrefix: workerData.options.channelPrefix,
   logger: logger
 });
 
 async function processBatch() {
-  // Read and analyze all files in parallel
-  const analysisPromises = workerData.filePaths.map(async (filePath: string) => {
+  // Check file existence
+  const validFiles: string[] = [];
+  for (const filePath of workerData.filePaths) {
     try {
-      await fs.access(filePath); // Check file existence
-      const code = await fs.readFile(filePath, 'utf-8');
-      const methods = generator.analyzeFile(filePath, code);
-      return methods;
+      await fs.access(filePath);
+      validFiles.push(filePath);
     } catch (error) {
       logger.warn(`Processing error for ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
-      return [];
     }
-  });
+  }
 
-  const methodArrays = await Promise.all(analysisPromises);
-  const allMethods = methodArrays.flat();
+  if (validFiles.length === 0) {
+    logger.warn('No valid files found to analyze');
+    return;
+  }
+
+  // Use the new analyzeFiles method for better performance and accuracy
+  const allMethods = await generator.analyzeFiles(validFiles);
   
   // Generate files once
-  generator.generateFiles(allMethods);
+  await generator.generateFiles(allMethods);
 }
 
 processBatch().catch(error => {
