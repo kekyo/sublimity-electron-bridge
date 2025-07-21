@@ -2,7 +2,7 @@
 // Do not edit manually
 
 export const name = "sublimity-electron-bridge-cli";
-export const version = "0.15.15";
+export const version = "0.16.1";
 export const description = "Electron bridge generator for automatic IPC setup (CLI)";
 export const author = "Kouji Matsui (@kekyo@mi.kekyo.net)";
 export const license = "MIT";

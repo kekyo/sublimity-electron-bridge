@@ -1,6 +1,6 @@
 {
   "name": "sublimity-electron-bridge-cli",
-  "version": "0.15.15",
+  "version": "0.16.1",
   "description": "Electron bridge generator for automatic IPC setup (CLI)",
   "keywords": [
     "electron",
@@ -23,7 +23,7 @@
   },
   "peerDependencies": {
     "commander": ">=11.1.0",
-    "sublimity-electron-bridge-core": "file:../core",
+    "sublimity-electron-bridge-core": ">=0.16.0",
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
