@@ -1,6 +1,5 @@
 {
   "name": "sublimity-electron-bridge-cli",
-  "version": "0.16.1",
   "description": "Electron bridge generator for automatic IPC setup (CLI)",
   "keywords": [
     "electron",
@@ -18,18 +17,19 @@
     "dist"
   ],
   "scripts": {
-    "build": "rv --npm . && npm i && tsc --noEmit && vite build",
-    "test": "rv --npm . && npm i && tsc --noEmit && vitest run"
+    "build": "vite build",
+    "test": "npm run build && vitest run",
+    "pack": "npm run build && screw-up pack --pack-destination ../artifacts"
   },
   "peerDependencies": {
     "commander": ">=11.1.0",
-    "sublimity-electron-bridge-core": ">=0.16.0",
+    "sublimity-electron-bridge-core": "*",
     "typescript": ">=5.0.0"
   },
   "devDependencies": {
     "@types/node": ">=24.0.10",
     "@vitest/ui": ">=3.2.4",
-    "screw-up": ">=0.8.1",
+    "screw-up": ">=0.12.0",
     "typescript": ">=5.8.3",
     "vite": ">=7.0.2",
     "vitest": ">=3.2.4"
