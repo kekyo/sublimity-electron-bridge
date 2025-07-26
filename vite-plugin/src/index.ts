@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 import { createDeferred, Deferred } from 'async-primitives';
 import { FSWatcher, watch } from 'chokidar';
 import { join, resolve } from 'path';
+import { version } from './generated/packageMetadata';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -46,9 +47,6 @@ export interface SublimityElectronBridgeVitePluginOptions {
 }
 
 ///////////////////////////////////////////////////////////////////////
-
-// Version is injected at build time by Vite
-declare const __VERSION__: string;
 
 const getTargetDirResolved = (baseDir: string | undefined, targetDir: string | undefined) => {
   const td = targetDir ?? 'src/main/expose/';
@@ -152,7 +150,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 const processAllFilesCore = async (
   logger: Logger, baseDir: string, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
 
-  logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${__VERSION__}]`);
+  logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${version}]`);
 
   try {
     // 1. Collect source files from directories

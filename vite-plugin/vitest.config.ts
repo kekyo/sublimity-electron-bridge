@@ -6,9 +6,6 @@ import { resolve } from 'path';
 const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
 
 export default defineConfig({
-  define: {
-    __VERSION__: JSON.stringify(packageJson.version)
-  },
   test: {
     globals: true,
     environment: 'node',
