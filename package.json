@@ -1,6 +1,5 @@
 {
   "name": "sublimity-electron-bridge",
-  "version": "0.17.0",
   "author": "Kouji Matsui (@kekyo@mi.kekyo.net)",
   "license": "MIT",
   "repository": {
@@ -15,7 +14,8 @@
     "cli"
   ],
   "scripts": {
-    "build": "rv --npm . && npm i && npm run build --workspaces",
-    "test": "rv --npm . && npm i && npm run test --workspaces"
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "pack": "npm run pack --workspaces"
   }
 }
