@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
+// sublimity-electron-bridge - Sublimity electron IPC bridge CLI
+// Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
+// Under MIT.
+// https://github.com/kekyo/sublimity-electron-bridge/
+
 import { Command } from 'commander';
 import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
 import { promises as fs } from 'fs';
-import { author, license, repository_url, version } from './generated/packageMetadata.ts';
+import { author, git_commit_hash, license, repository_url, version } from './generated/packageMetadata.ts';
 
 // Create the program
 const program = new Command();
@@ -12,7 +17,7 @@ const program = new Command();
 program
   .name('seb')
   .version(version)
-  .description(`Sublimity Electron IPC bridge CLI [${version}]`)
+  .description(`Sublimity Electron IPC bridge CLI [${version},${git_commit_hash}]`)
   .addHelpText('after', `
 Copyright (c) ${author}
 Repository: ${repository_url}

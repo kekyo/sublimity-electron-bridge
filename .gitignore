@@ -106,3 +106,5 @@ dist/
 
 test-output/
 package/
+
+packageMetadata.ts
