@@ -220,12 +220,15 @@ export interface FunctionInfo extends SourceCodeFragment {
 const extractJSDocDecorator = (node: ts.Node): JSDocDecorator | undefined => {
   // Get JSDoc comment
   const jsDocTags = ts.getJSDocTags(node);
+  console.log(`extractJSDocDecorator: node kind=${ts.SyntaxKind[node.kind]}, tags=${jsDocTags.length}`);
   
   for (const tag of jsDocTags) {
+    console.log(`extractJSDocDecorator: tag="${tag.tagName.escapedText}", comment="${tag.comment}"`);
     if (tag.tagName.escapedText === 'decorator') {
       // Get @decorator tag value
       if (tag.comment) {
         const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text).join('');
+        console.log(`extractJSDocDecorator: decorator comment="${comment}"`);
         // Get parameters separated by whitespace
         const params = comment.
           trim().
@@ -235,11 +238,13 @@ const extractJSDocDecorator = (node: ts.Node): JSDocDecorator | undefined => {
         if (params.length > 0) {
           const decorator = params[0];
           const args = params.slice(1);
+          console.log(`extractJSDocDecorator: found decorator="${decorator}", args=${JSON.stringify(args)}`);
           return { decorator, args };
         }
       }
     }
   }
+  console.log(`extractJSDocDecorator: no decorator found`);
   return undefined;
 };
 
@@ -809,15 +814,19 @@ const convertTypeToAST = (
  * @returns Array of extracted function information with complete AST data
  */
 export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
+  console.log(`extractFunctions: tsConfig=${tsConfig ? 'provided' : 'null'}, baseDir=${baseDir}, sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
+  
   // Parse tsconfig
   const parsedConfig = ts.parseJsonConfigFileContent(
     tsConfig,
     ts.sys,
     baseDir
   );
+  console.log(`extractFunctions: parsed config, fileNames=${parsedConfig.fileNames.length}, options=${JSON.stringify(parsedConfig.options.target)}`);
 
   // Generate Program for entire project (including all files)
   const allFiles = [...new Set([...parsedConfig.fileNames, ...sourceFilePaths])];
+  console.log(`extractFunctions: creating program with ${allFiles.length} files`);
   const program = ts.createProgram({
     rootNames: allFiles,
     options: parsedConfig.options,
@@ -829,6 +838,7 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
 
   // Process each file
   for (const sourceFilePath of sourceFilePaths) {
+    console.log(`extractFunctions: processing ${sourceFilePath}`);
     const sourceFile = program.getSourceFile(sourceFilePath);
     if (!sourceFile) {
       console.warn(`File not found: ${sourceFilePath}`);
@@ -921,17 +931,24 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
  * @returns TypeScript configuration object
  */
 export const loadTsConfig = (tsConfig: string | any | undefined, baseDir: string): any => {
+  console.log(`loadTsConfig: tsConfig=${typeof tsConfig}, baseDir=${baseDir}`);
   if (!tsConfig || typeof tsConfig === 'string') {
     const tsConfigPath = tsConfig ? resolve(baseDir, tsConfig) : baseDir;
+    console.log(`loadTsConfig: searching for tsconfig.json in ${tsConfigPath}`);
     const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
     if (!configPath) {
+      console.error(`loadTsConfig: tsconfig.json not found in ${tsConfigPath}`);
       throw new Error(`tsconfig.json not found in ${tsConfigPath}`);
     }
+    console.log(`loadTsConfig: found tsconfig.json at ${configPath}`);
     const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     if (!configFile.config) {
+      console.error(`loadTsConfig: Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
       throw new Error(`Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
     }
+    console.log(`loadTsConfig: successfully loaded tsconfig`);
     return configFile.config;
   }
+  console.log(`loadTsConfig: using provided tsconfig object`);
   return tsConfig;
 };
