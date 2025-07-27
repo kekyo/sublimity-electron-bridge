@@ -9,7 +9,7 @@ import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
-import { createDeferred, Deferred } from 'async-primitives';
+import { createDeferred, Deferred, createAsyncLock } from 'async-primitives';
 import { FSWatcher, watch } from 'chokidar';
 import { join, resolve } from 'path';
 import { version } from './generated/packageMetadata';
@@ -253,6 +253,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     return rd.promise;
   }
 
+  const locker = createAsyncLock();
   let logger = createConsoleLogger();
   let baseDir: string | undefined;
   let processingCount = 0;
@@ -302,27 +303,56 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     config: config => {
       // Get base directory from Vite config
       baseDir = config?.root ?? baseDir;
+      const bd = baseDir;
       logger = {
         debug: config?.customLogger?.info ?? logger.debug,
         info: config?.customLogger?.info ?? logger.info,
         warn: config?.customLogger?.warn ?? logger.warn,
         error: config?.customLogger?.error ?? logger.error,
       };
+      logger.info(`[seb-vite:config:${processingCount++}]: Configured: baseDir=${bd ?? "(undefined)"}}`);
     },
     configResolved: async config => {
       // Get base directory from Vite config
+      const pc = processingCount++;
       baseDir = config?.root ?? baseDir;
+      const bd = baseDir;
       logger = {
         debug: config?.logger?.info ?? config?.customLogger?.info ?? logger.debug,
         info: config?.logger?.info ?? config?.customLogger?.info ?? logger.info,
         warn: config?.logger?.warn ?? config?.customLogger?.warn ?? logger.warn,
         error: config?.logger?.error ?? config?.customLogger?.error ?? logger.error,
       };
-      await stopFileWatching();
-      await processAllFiles(logger, baseDir, `seb-vite:configResolved:${processingCount++}`);
-      await startFileWatching();
+      logger.info(`[seb-vite:configResolved:${pc}]: Start: baseDir=${bd ?? "(undefined)"}}`);
+      const l = await locker.lock();
+      try {
+        await stopFileWatching();
+        await processAllFiles(logger, bd, `seb-vite:configResolved:${pc}`);
+        await startFileWatching();
+      } finally {
+        l.release();
+        logger.info(`[seb-vite:configResolved:${pc}]: Exit: baseDir=${bd ?? "(undefined)"}}`);
+      }
     },
-    buildStart: () => stopFileWatching(),
-    buildEnd: () => startFileWatching(),
+    buildStart: async () => {
+      const pc = processingCount++;
+      const bd = baseDir;
+      logger.info(`[seb-vite:buildStart:${pc}]: Starting: baseDir=${bd ?? "(undefined)"}}`);
+      try {
+        await stopFileWatching();
+      } finally {
+        logger.info(`[seb-vite:buildStart:${pc}]: Started: baseDir=${bd ?? "(undefined)"}}`);
+      }
+    },
+    buildEnd: async () => {
+      const pc = processingCount++;
+      const bd = baseDir;
+      logger.info(`[seb-vite:buildEnd:${pc}]: BuildStarting: baseDir=${bd ?? "(undefined)"}}`);
+      try {
+        await startFileWatching();
+      } finally {
+        logger.info(`[seb-vite:buildEnd:${pc}]: BuildStarted: baseDir=${bd ?? "(undefined)"}}`);
+      }
+    }
   };
 };
