@@ -1,3 +1,8 @@
+// sublimity-electron-bridge - Sublimity electron IPC bridge
+// Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
+// Under MIT.
+// https://github.com/kekyo/sublimity-electron-bridge/
+
 import type { Plugin } from 'vite';
 import { createElectronBridgeGenerator, createConsoleLogger, type ElectronBridgeOptions, type Logger } from 'sublimity-electron-bridge-core';
 import { Worker } from 'worker_threads';

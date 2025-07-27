@@ -1,3 +1,8 @@
+// sublimity-electron-bridge - Sublimity electron IPC bridge
+// Copyright (c) Kouji Matsui (@kekyo@mi.kekyo.net)
+// Under MIT.
+// https://github.com/kekyo/sublimity-electron-bridge/
+
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
 import { ElectronBridgeOptions, ElectronBridgeGenerator } from './types';
