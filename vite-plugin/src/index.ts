@@ -63,6 +63,7 @@ const getTargetFilePattern = (baseDir: string | undefined, targetDir: string | u
 };
 
 const collectSourceFiles = async (
+  logger: Logger,
   baseDir: string | undefined,
    options: SublimityElectronBridgeVitePluginOptions): Promise<string[]> => {
   const targetFilePattern = getTargetFilePattern(baseDir, options.targetDir);
@@ -80,6 +81,7 @@ const collectSourceFiles = async (
     });
     return files;
   } catch (error) {
+    logger.error(`collectSourceFiles error: pattern=${targetFilePattern}, cwd=${baseDir}, error=${error}`);
     return [];
   }
 };
@@ -159,7 +161,9 @@ const processAllFilesCore = async (
 
   try {
     // 1. Collect source files from directories
-    const sourceFiles = await collectSourceFiles(baseDir, options);
+    const sourceFiles = await collectSourceFiles(logger, baseDir, options);
+    
+    logger.info(`Collected ${sourceFiles.length} source files: ${JSON.stringify(sourceFiles)}`);
 
     // Convert to ElectronBridgeOptions with baseDir from Vite
     const bridgeOptions: ElectronBridgeOptions = {
