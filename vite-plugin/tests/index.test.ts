@@ -43,7 +43,7 @@ describe('SublimityElectronBridge Vite Plugin', () => {
 
   // Helper function to copy specific test fixtures
   const copyTestFixtures = (filenames: string[]) => {
-    const sourceFixtures = join(__dirname, '..', 'src', 'test-fixtures');
+    const sourceFixtures = join(__dirname, 'test-fixtures');
     filenames.forEach(filename => {
       const sourcePath = join(sourceFixtures, filename);
       const targetPath = join(testFixturesDir, filename);
