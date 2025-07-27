@@ -24,6 +24,7 @@ const generator = createElectronBridgeGenerator({
   typeDefinitionsFile: workerData.options.typeDefinitionsFile,
   defaultNamespace: workerData.options.defaultNamespace,
   baseDir: workerData.options.baseDir,
+  tsConfig: workerData.options.tsConfig,
   logger: logger
 });
 

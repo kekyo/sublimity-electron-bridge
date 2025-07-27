@@ -129,7 +129,8 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
           preloadHandlerFile: options.preloadHandlerFile,
           typeDefinitionsFile: options.typeDefinitionsFile,
           defaultNamespace: options.defaultNamespace,
-          baseDir: options.baseDir
+          baseDir: options.baseDir,
+          tsConfig: options.tsConfig
         },
         filePaths
       },
