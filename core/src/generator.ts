@@ -747,9 +747,20 @@ const generateTypeDefinitions = (
  */
 const extractExposedFunctionsFromExtractor = (
   tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
+  console.log(`extractExposedFunctionsFromExtractor: tsConfig=${tsConfig ? JSON.stringify(Object.keys(tsConfig)) : 'null'}`);
+  console.log(`extractExposedFunctionsFromExtractor: baseDir=${baseDir}`);
+  console.log(`extractExposedFunctionsFromExtractor: sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
+  
   const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
-  return functionInfos.
-    filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
+  console.log(`extractFunctions returned ${functionInfos.length} functions`);
+  functionInfos.forEach((fi, i) => {
+    console.log(`Function ${i}: name=${fi.name}, kind=${fi.kind}, decorator=${fi.jsdocDecorator?.decorator}, args=${JSON.stringify(fi.jsdocDecorator?.args)}`);
+  });
+  
+  const exposed = functionInfos.filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
+  console.log(`Found ${exposed.length} exposed functions`);
+  
+  return exposed;
 };
 
 /**
@@ -849,9 +860,12 @@ export const createElectronBridgeGenerator =
    * @returns The exposed methods
    */
   const analyzeFiles = async (filePaths: string[]): Promise<FunctionInfo[]> => {
+    logger.info(`analyzeFiles: received ${filePaths.length} files`);
+    logger.info(`analyzeFiles: baseDir=${baseDir}, tsConfig=${typeof tsConfig}`);
 
     // Load the TypeScript configuration object
     const tsConfigObj = loadTsConfig(tsConfig, baseDir!);
+    logger.info(`analyzeFiles: loaded tsConfig: ${tsConfigObj ? 'success' : 'failed'}`);
 
     // Filter out generated files
     const filteredFiles = filePaths.filter(filePath => 
@@ -861,12 +875,16 @@ export const createElectronBridgeGenerator =
         preloadHandlerFile,
         typeDefinitionsFile)
     );
+    logger.info(`analyzeFiles: filtered to ${filteredFiles.length} files`);
 
     if (filteredFiles.length === 0) {
+      logger.warn(`analyzeFiles: no files to analyze after filtering`);
       return [];
     }
 
-    return extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles);
+    const result = extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles);
+    logger.info(`analyzeFiles: extracted ${result.length} exposed functions`);
+    return result;
   };
 
   /**

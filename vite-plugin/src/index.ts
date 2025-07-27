@@ -107,6 +107,7 @@ const processBatchDirectly = async (logger: Logger, options: ElectronBridgeOptio
 
   // Use the new analyzeFiles method for better performance and accuracy
   const allMethods = await generator.analyzeFiles(validFiles);
+  logger.info(`analyzeFiles returned ${allMethods.length} methods`);
   
   // Generate files once
   await generator.generateFiles(allMethods);
