@@ -7,8 +7,10 @@ import dayjs from 'dayjs';
 import { createElectronBridgeGenerator } from '../src/index';
 import { isCamelCase, toPascalCase } from '../src/generator';
 import { extractFunctions, loadTsConfig } from '../src/extractor';
+import { createConsoleLogger } from '../src/logger';
 
 describe('generator function', () => {
+  const logger = createConsoleLogger('generator-test');
   const testOutputBaseDir = join(tmpdir(), 'seb-test/core/generator', dayjs().format('YYYYMMDD_HHmmssSSS'));
   let testOutputDir;
   let tsConfigFile;
@@ -134,12 +136,12 @@ export class FileService {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, testBaseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, testBaseDir, logger);
       const functions = extractFunctions(
         tsConfig, testBaseDir,
         [
           join(testBaseDir, 'src/services/FileService.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -193,13 +195,13 @@ export function getVersion(): Promise<string> {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -281,13 +283,13 @@ export function getVersion(): Promise<string> {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -364,12 +366,12 @@ export class FileService {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -425,12 +427,12 @@ export class FileService {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -595,14 +597,14 @@ export class DatabaseService {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/version.ts'),
           join(baseDir, 'src/services/DatabaseService.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -678,12 +680,12 @@ export class FileService {
         typeDefinitionsFile: typeDefFile,
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -777,14 +779,14 @@ export async function formatDate(date: Date): Promise<string> {
         typeDefinitionsFile: typeDefFile,
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/FileService.ts'),
           join(baseDir, 'src/utils/system.ts'),
           join(baseDir, 'src/utils/format.ts')
-        ]);
+        ], logger);
         
       await generator.generateFiles(functions);
       
@@ -958,13 +960,13 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
         typeDefinitionsFile: typeDefFile
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/UserService.ts'),
           join(baseDir, 'src/utils/orderProcessor.ts')
-        ]);
+        ], logger);
       
       await generator.generateFiles(functions);
       
@@ -1082,13 +1084,13 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
         typeDefinitionsFile: typeDefFile
       });
 
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/TypeScriptService.ts'),
           join(baseDir, 'src/utils/nodeUtils.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
 
@@ -1190,13 +1192,13 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
         typeDefinitionsFile: typeDefFile
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/DataService.ts'),
           join(baseDir, 'src/utils/mapper.ts')
-        ]);
+        ], logger);
 
       await generator.generateFiles(functions);
       
@@ -1274,13 +1276,13 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
         typeDefinitionsFile: typeDefFile
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/BuiltinService.ts'),
           join(baseDir, 'src/utils/builtinUtils.ts')
-        ]);
+        ], logger);
       
       await generator.generateFiles(functions);
       
@@ -1385,13 +1387,13 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
         typeDefinitionsFile: typeDefFile
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/MixedService.ts'),
           join(baseDir, 'src/utils/configValidator.ts')
-        ]);
+        ], logger);
       
       await generator.generateFiles(functions);
       
@@ -1518,14 +1520,14 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
         typeDefinitionsFile: typeDefFile
       });
       
-      const tsConfig = loadTsConfig(tsConfigFile, baseDir);
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
       const functions = extractFunctions(
         tsConfig, baseDir,
         [
           join(baseDir, 'src/services/UserService.ts'),
           join(baseDir, 'src/services/ProductService.ts'),
           join(baseDir, 'src/processors/orderProcessor.ts')
-        ]);
+        ], logger);
       await generator.generateFiles(functions);
       
       const mainContent = readFileSync(mainFile, 'utf8');

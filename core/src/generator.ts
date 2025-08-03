@@ -5,7 +5,7 @@
 
 import { resolve, dirname, relative, isAbsolute } from 'path';
 import { access, mkdir, readFile, writeFile } from 'fs/promises';
-import { ElectronBridgeOptions, ElectronBridgeGenerator } from './types';
+import { ElectronBridgeOptions, ElectronBridgeGenerator, Logger } from './types';
 import { extractFunctions, FunctionInfo, loadTsConfig, SourceCodeFragment, TypeAST } from './extractor';
 import { createConsoleLogger } from './logger';
 
@@ -746,19 +746,19 @@ const generateTypeDefinitions = (
  * @returns Array of ExposedFunction
  */
 const extractExposedFunctionsFromExtractor = (
-  tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
-  console.log(`extractExposedFunctionsFromExtractor: tsConfig=${tsConfig ? JSON.stringify(Object.keys(tsConfig)) : 'null'}`);
-  console.log(`extractExposedFunctionsFromExtractor: baseDir=${baseDir}`);
-  console.log(`extractExposedFunctionsFromExtractor: sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
+  tsConfig: any, baseDir: string, sourceFilePaths: string[], logger: Logger): FunctionInfo[] => {
+  logger.debug(`extractExposedFunctionsFromExtractor: tsConfig=${tsConfig ? JSON.stringify(Object.keys(tsConfig)) : 'null'}`);
+  logger.debug(`extractExposedFunctionsFromExtractor: baseDir=${baseDir}`);
+  logger.debug(`extractExposedFunctionsFromExtractor: sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
   
-  const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths);
-  console.log(`extractFunctions returned ${functionInfos.length} functions`);
+  const functionInfos = extractFunctions(tsConfig, baseDir, sourceFilePaths, logger);
+  logger.debug(`extractFunctions returned ${functionInfos.length} functions`);
   functionInfos.forEach((fi, i) => {
-    console.log(`Function ${i}: name=${fi.name}, kind=${fi.kind}, decorator=${fi.jsdocDecorator?.decorator}, args=${JSON.stringify(fi.jsdocDecorator?.args)}`);
+    logger.debug(`Function ${i}: name=${fi.name}, kind=${fi.kind}, decorator=${fi.jsdocDecorator?.decorator}, args=${JSON.stringify(fi.jsdocDecorator?.args)}`);
   });
   
   const exposed = functionInfos.filter(functionInfo => functionInfo.jsdocDecorator?.decorator === 'expose');
-  console.log(`Found ${exposed.length} exposed functions`);
+  logger.debug(`Found ${exposed.length} exposed functions`);
   
   return exposed;
 };
@@ -864,7 +864,7 @@ export const createElectronBridgeGenerator =
     logger.info(`analyzeFiles: baseDir=${baseDir}, tsConfig=${typeof tsConfig}`);
 
     // Load the TypeScript configuration object
-    const tsConfigObj = loadTsConfig(tsConfig, baseDir!);
+    const tsConfigObj = loadTsConfig(tsConfig, baseDir!, logger);
     logger.info(`analyzeFiles: loaded tsConfig: ${tsConfigObj ? 'success' : 'failed'}`);
 
     // Filter out generated files
@@ -882,7 +882,7 @@ export const createElectronBridgeGenerator =
       return [];
     }
 
-    const result = extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles);
+    const result = extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles, logger);
     logger.info(`analyzeFiles: extracted ${result.length} exposed functions`);
     return result;
   };
