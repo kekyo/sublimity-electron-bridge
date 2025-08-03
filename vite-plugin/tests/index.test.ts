@@ -420,9 +420,13 @@ export {}
 
       const startTime = Date.now();
 
-      // Start 2 concurrent requests
-      const promise1 = plugin.buildStart();
-      const promise2 = plugin.buildStart();
+      // Start 2 concurrent requests with proper buildEnd calls
+      const promise1 = plugin.buildStart().then(async () => {
+        await plugin.buildEnd();
+      });
+      const promise2 = plugin.buildStart().then(async () => {
+        await plugin.buildEnd();
+      });
 
       await Promise.all([promise1, promise2]);
       const endTime = Date.now();
@@ -447,10 +451,16 @@ export {}
 
       const startTime = Date.now();
 
-      // Start 3 concurrent requests
-      const promise1 = plugin.buildStart();
-      const promise2 = plugin.buildStart();
-      const promise3 = plugin.buildStart();
+      // Start 3 concurrent requests with proper buildEnd calls
+      const promise1 = plugin.buildStart().then(async () => {
+        await plugin.buildEnd();
+      });
+      const promise2 = plugin.buildStart().then(async () => {
+        await plugin.buildEnd();
+      });
+      const promise3 = plugin.buildStart().then(async () => {
+        await plugin.buildEnd();
+      });
 
       await Promise.all([promise1, promise2, promise3]);
       const endTime = Date.now();
@@ -477,10 +487,11 @@ export {}
       const promises = [];
       const timings = [];
 
-      // Start requests with minimal delays
+      // Start requests with minimal delays and proper buildEnd calls
       for (let i = 0; i < 5; i++) {
         const requestStart = Date.now();
-        const promise = plugin.buildStart().then(() => {
+        const promise = plugin.buildStart().then(async () => {
+          await plugin.buildEnd();
           timings.push(Date.now() - requestStart);
         });
         promises.push(promise);
@@ -510,17 +521,19 @@ export {}
       // Delivery root directory path into plugin.
       await plugin.configResolved({ root: tempDir });
 
-      // First request
+      // First request with proper buildEnd
       const start1 = Date.now();
       await plugin.buildStart();
+      await plugin.buildEnd();
       const end1 = Date.now();
 
       // Wait a bit
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // Second request
+      // Second request with proper buildEnd
       const start2 = Date.now();
       await plugin.buildStart();
+      await plugin.buildEnd();
       const end2 = Date.now();
 
       console.log(`First request: ${end1 - start1}ms (enableWorker: ${enableWorker})`);
