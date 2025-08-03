@@ -9,8 +9,7 @@ import { Worker } from 'worker_threads';
 import { promises as fs } from 'fs';
 import { glob } from 'glob';
 import { createRequire } from 'module';
-import { createDeferred, Deferred, createAsyncLock, LockHandle, createManuallySignal } from 'async-primitives';
-import { FSWatcher, watch } from 'chokidar';
+import { createDeferred, Deferred, createAsyncLock } from 'async-primitives';
 import { join, resolve } from 'path';
 import { version } from './generated/packageMetadata';
 
@@ -269,69 +268,13 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     }
   };
 
-  let watcher: FSWatcher | undefined;
-
-  const startFileWatching = async (logger: Logger, baseDir: string, processingPrefix: string) => {
-    if (watcher) {
-      watcher.close();
-    }
-    if (!baseDir) {
-      return;
-    }
-
-    const watchTargetDir = getTargetDirResolved(baseDir, options.targetDir);
-
-    logger.info(`[${processingPrefix}]: Start watching: ${watchTargetDir}`);
-
-    watcher = watch(watchTargetDir, {
-      persistent: true,
-      awaitWriteFinish: true,
-      interval: 100
-    });
-    watcher.on('all', async (event, filePath) => {
-      switch (event) {
-        case 'add':
-        case 'change':
-        case 'unlink': {
-          logger.info(`[${processingPrefix}]: Detected: ${event}: ${filePath}`);
-          await processAllFiles(logger, baseDir!, processingPrefix);
-        }
-      }
-    });
-  };
-
-  const stopFileWatching = async (logger: Logger, processingPrefix: string) => {
-    if (watcher) {
-      watcher.close();
-      watcher = undefined;
- 
-      logger.info(`[${processingPrefix}]: Stopped watching`);
-    }
-  };
-
-  const watcherLocker = createAsyncLock();
-
-  let _watcherLockHandle: LockHandle | undefined;
   let _logger = createConsoleLogger();
   let _baseDir: string | undefined;
   let _processingCount = 0;
 
   return {
     name: 'sublimity-electron-bridge',
-    config: config => {
-      // Get base directory from Vite config
-      const baseDir = config?.root ?? _baseDir;
-      _baseDir = baseDir;
-      const logger = {
-        debug: config?.customLogger?.info ?? _logger.debug,
-        info: config?.customLogger?.info ?? _logger.info,
-        warn: config?.customLogger?.warn ?? _logger.warn,
-        error: config?.customLogger?.error ?? _logger.error,
-      };
-      _logger = logger;
-      const logPrefix = `seb-vite:config:${_processingCount++}`;
-      logger.info(`[${logPrefix}]: Configured: baseDir=${baseDir ?? "(undefined)"}`);
-    },
+    apply: 'build',
     configResolved: async config => {
       // Get base directory from Vite config
       const baseDir = config?.root ?? _baseDir;
@@ -345,13 +288,11 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       _logger = logger;
       const logPrefix = `seb-vite:configResolved:${_processingCount++}`;
       logger.info(`[${logPrefix}]: Start: baseDir=${baseDir ?? "(undefined)"}`);
-      const wl = await watcherLocker.lock();
       try {
-        await stopFileWatching(logger, logPrefix);
-        await processAllFiles(logger, baseDir, logPrefix);
-        await startFileWatching(logger, baseDir, logPrefix);
+        if (baseDir) {
+          await processAllFiles(logger, baseDir, logPrefix);
+        }
       } finally {
-        wl.release();
         logger.info(`[${logPrefix}]: Exit: baseDir=${baseDir ?? "(undefined)"}`);
       }
     },
@@ -359,37 +300,13 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
       const baseDir = _baseDir;
       const logger = _logger;
       const logPrefix = `seb-vite:buildStart:${_processingCount++}`;
-      logger.info(`[${logPrefix}]: Starting: baseDir=${baseDir ?? "(undefined)"}`);
-      if (!_watcherLockHandle) {
-        const watcherLockHandle = await watcherLocker.lock();
-        _watcherLockHandle = watcherLockHandle;
-        try {
-          await stopFileWatching(logger, logPrefix);
-        } finally {
-          logger.info(`[${logPrefix}]: Started: baseDir=${baseDir ?? "(undefined)"}`);
+      logger.info(`[${logPrefix}]: Start: baseDir=${baseDir ?? "(undefined)"}`);
+      try {
+        if (baseDir) {
+          await processAllFiles(logger, baseDir, logPrefix);
         }
-      } else {
-        logger.info(`[${logPrefix}]: Already started: baseDir=${baseDir ?? "(undefined)"}`);
-      }
-    },
-    buildEnd: async () => {
-      const baseDir = _baseDir;
-      const logger = _logger;
-      const logPrefix = `seb-vite:buildEnd:${_processingCount++}`;
-      logger.info(`[${logPrefix}]: Ending: baseDir=${baseDir ?? "(undefined)"}`);
-      const watcherLockHandle = _watcherLockHandle;
-      _watcherLockHandle = undefined;
-      if (watcherLockHandle) {
-        try {
-          if (baseDir) {
-            await startFileWatching(logger, baseDir, logPrefix);
-          }
-        } finally {
-          logger.info(`[${logPrefix}]: Ended: baseDir=${baseDir ?? "(undefined)"}`);
-          watcherLockHandle.release();
-        }
-      } else {
-        logger.info(`[${logPrefix}]: Already ended: baseDir=${baseDir ?? "(undefined)"}`);
+      } finally {
+        logger.info(`[${logPrefix}]: Exit: baseDir=${baseDir ?? "(undefined)"}`);
       }
     }
   };

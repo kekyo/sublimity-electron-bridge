@@ -35,8 +35,7 @@
     "pack": "npm run build && screw-up pack --pack-destination ../artifacts"
   },
   "peerDependencies": {
-    "async-primitives": ">=0.4.0",
-    "chokidar": ">=4.0.3",
+    "async-primitives": ">=0.6.1",
     "glob": ">=11.0.3",
     "sublimity-electron-bridge-core": "*",
     "typescript": ">=5.0.0",
