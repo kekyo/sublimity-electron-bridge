@@ -6,6 +6,7 @@
 import * as ts from 'typescript';
 import { join, resolve } from 'path';
 import { existsSync, readFileSync } from 'fs';
+import { Logger } from './types';
 
 /**
  * Position information within source code
@@ -217,18 +218,18 @@ export interface FunctionInfo extends SourceCodeFragment {
  * @param node TypeScript Node
  * @returns JSDocDecorator object (undefined if not found)
  */
-const extractJSDocDecorator = (node: ts.Node): JSDocDecorator | undefined => {
+const extractJSDocDecorator = (node: ts.Node, logger: Logger): JSDocDecorator | undefined => {
   // Get JSDoc comment
   const jsDocTags = ts.getJSDocTags(node);
-  console.log(`extractJSDocDecorator: node kind=${ts.SyntaxKind[node.kind]}, tags=${jsDocTags.length}`);
+  logger.debug(`extractJSDocDecorator: node kind=${ts.SyntaxKind[node.kind]}, tags=${jsDocTags.length}`);
   
   for (const tag of jsDocTags) {
-    console.log(`extractJSDocDecorator: tag="${tag.tagName.escapedText}", comment="${tag.comment}"`);
+    logger.debug(`extractJSDocDecorator: tag="${tag.tagName.escapedText}", comment="${tag.comment}"`);
     if (tag.tagName.escapedText === 'decorator') {
       // Get @decorator tag value
       if (tag.comment) {
         const comment = typeof tag.comment === 'string' ? tag.comment : tag.comment.map(c => c.text).join('');
-        console.log(`extractJSDocDecorator: decorator comment="${comment}"`);
+        logger.debug(`extractJSDocDecorator: decorator comment="${comment}"`);
         // Get parameters separated by whitespace
         const params = comment.
           trim().
@@ -238,13 +239,13 @@ const extractJSDocDecorator = (node: ts.Node): JSDocDecorator | undefined => {
         if (params.length > 0) {
           const decorator = params[0];
           const args = params.slice(1);
-          console.log(`extractJSDocDecorator: found decorator="${decorator}", args=${JSON.stringify(args)}`);
+          logger.debug(`extractJSDocDecorator: found decorator="${decorator}", args=${JSON.stringify(args)}`);
           return { decorator, args };
         }
       }
     }
   }
-  console.log(`extractJSDocDecorator: no decorator found`);
+  logger.debug(`extractJSDocDecorator: no decorator found`);
   return undefined;
 };
 
@@ -343,7 +344,7 @@ const getSourceLocationFromType = (type: ts.Type): SourceLocation | undefined =>
  * @returns Type parameters
  */
 const getParametersFromSignature =
-  (signature: ts.Signature, checker: ts.TypeChecker, currentLocation: SourceLocation | undefined, visitedTypes: Map<ts.Type, TypeAST>): FunctionParameterNode[] => {
+  (signature: ts.Signature, checker: ts.TypeChecker, currentLocation: SourceLocation | undefined, visitedTypes: Map<ts.Type, TypeAST>, logger: Logger): FunctionParameterNode[] => {
   return signature.parameters.map(param => {
     const name = param.getName();
     const paramType = checker.getTypeOfSymbolAtLocation(param, param.valueDeclaration!);
@@ -356,7 +357,7 @@ const getParametersFromSignature =
 
     const functionParameterNode: FunctionParameterNode = {
       name,
-      type: convertTypeToAST(paramType, checker, paramLocation, visitedTypes),
+      type: convertTypeToAST(paramType, checker, paramLocation, visitedTypes, logger),
       isRestParameter,
       isOptional,
       memberString: `${name}${isOptional ? '?' : ''}${isRestParameter ? '...' : ''}`,
@@ -375,7 +376,7 @@ const getParametersFromSignature =
  * @returns Properties
  */
 const getPropertiesFromType =
-  (type: ts.Type, checker: ts.TypeChecker, currentLocation: SourceLocation | undefined, visitedTypes: Map<ts.Type, TypeAST>): PropertyNode[] => {
+  (type: ts.Type, checker: ts.TypeChecker, currentLocation: SourceLocation | undefined, visitedTypes: Map<ts.Type, TypeAST>, logger: Logger): PropertyNode[] => {
   return checker.getPropertiesOfType(type).map(prop => {
     const name = prop.getName();
     const propType = checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration!);
@@ -387,7 +388,7 @@ const getPropertiesFromType =
 
     const propertyNode: PropertyNode = {
       name,
-      type: convertTypeToAST(propType, checker, propLocation, visitedTypes),
+      type: convertTypeToAST(propType, checker, propLocation, visitedTypes, logger),
       isOptional,
       memberString: `${name}${isOptional ? '?' : ''}`,
       sourceLocation: propLocation
@@ -439,7 +440,8 @@ const convertTypeToAST = (
   type: ts.Type,
   checker: ts.TypeChecker,
   parentLocation: SourceLocation | undefined,
-  visitedTypes: Map<ts.Type, TypeAST>): TypeAST => {
+  visitedTypes: Map<ts.Type, TypeAST>,
+  logger: Logger): TypeAST => {
 
   // Check if the type has already been visited
   let typeAST = visitedTypes.get(type);
@@ -463,14 +465,14 @@ const convertTypeToAST = (
   if (type.aliasSymbol) {
     const typeArguments = type.aliasTypeArguments?.map(arg => {
       const typeArgumentLocation = getSourceLocationFromType(type) ?? currentLocation;
-      return convertTypeToAST(arg, checker, typeArgumentLocation, visitedTypes);
+      return convertTypeToAST(arg, checker, typeArgumentLocation, visitedTypes, logger);
     });
 
     // Is enum type?
     if (type.flags == (ts.TypeFlags.EnumLiteral | ts.TypeFlags.Union)) {
       const values = (type as ts.UnionType).types.map(enumValueType => {
         const valueLocation = getSourceLocationFromType(enumValueType) ?? currentLocation;
-        return convertTypeToAST(enumValueType, checker, valueLocation, visitedTypes) as EnumValueNode;
+        return convertTypeToAST(enumValueType, checker, valueLocation, visitedTypes, logger) as EnumValueNode;
       });
 
       const enumTypeNode = typeAST as EnumTypeNode;
@@ -529,7 +531,7 @@ const convertTypeToAST = (
 
     const arrayTypeNode = typeAST as ArrayTypeNode;
     arrayTypeNode.kind = 'array';
-    arrayTypeNode.elementType = convertTypeToAST(elementType, checker, elementTypeLocation, visitedTypes);
+    arrayTypeNode.elementType = convertTypeToAST(elementType, checker, elementTypeLocation, visitedTypes, logger);
     arrayTypeNode.typeString = typeString;
     arrayTypeNode.sourceLocation = currentLocation;
     return arrayTypeNode;
@@ -560,7 +562,7 @@ const convertTypeToAST = (
               const paramType = checker.getTypeAtLocation(typeParam);
               const paramLocation = getSourceLocationFromType(paramType) ?? currentLocation;
 
-              return convertTypeToAST(paramType, checker, paramLocation, visitedTypes);
+              return convertTypeToAST(paramType, checker, paramLocation, visitedTypes, logger);
             });
 
             // Generate the referenced type string using the typeString from recursively generated TypeNodes
@@ -594,7 +596,8 @@ const convertTypeToAST = (
           typeArg,
           checker,
           typeArgLocation,
-          visitedTypes);
+          visitedTypes,
+          logger);
       });
 
       // Create the referenced interface type (may have type parameters if it's a generic interface)
@@ -602,7 +605,7 @@ const convertTypeToAST = (
       let jsdocDecorator: JSDocDecorator | undefined;
       if (symbol && symbol.declarations && symbol.declarations.length > 0) {
         const declaration = symbol.declarations[0];
-        jsdocDecorator = extractJSDocDecorator(declaration);
+        jsdocDecorator = extractJSDocDecorator(declaration, logger);
       }
 
       const referencedType: InterfaceTypeNode = {
@@ -629,14 +632,14 @@ const convertTypeToAST = (
   const signatures = checker.getSignaturesOfType(type, ts.SignatureKind.Call);
   if (signatures.length > 0) {
     const signature = signatures[0];
-    const parameters = getParametersFromSignature(signature, checker, currentLocation, visitedTypes);
+    const parameters = getParametersFromSignature(signature, checker, currentLocation, visitedTypes, logger);
     const returnType = checker.getReturnTypeOfSignature(signature);
     const returnTypeLocation = getSourceLocationFromType(returnType) ?? currentLocation;
 
     const functionTypeNode = typeAST as FunctionTypeNode;
     functionTypeNode.kind = 'function';
     functionTypeNode.parameters = parameters;
-    functionTypeNode.returnType = convertTypeToAST(returnType, checker, returnTypeLocation, visitedTypes);
+    functionTypeNode.returnType = convertTypeToAST(returnType, checker, returnTypeLocation, visitedTypes, logger);
     functionTypeNode.typeString = typeString;
     functionTypeNode.sourceLocation = currentLocation;
     return functionTypeNode;
@@ -649,20 +652,20 @@ const convertTypeToAST = (
     // Is this anonymous function type?
     const signature = objectType.getCallSignatures()[0];
     if (signature) {
-      const parameters = getParametersFromSignature(signature, checker, currentLocation, visitedTypes);
+      const parameters = getParametersFromSignature(signature, checker, currentLocation, visitedTypes, logger);
       const returnType = checker.getReturnTypeOfSignature(signature);
       const returnTypeLocation = getSourceLocationFromType(returnType) ?? currentLocation;
 
       const functionTypeNode = typeAST as FunctionTypeNode;
       functionTypeNode.kind = 'function';
       functionTypeNode.parameters = parameters;
-      functionTypeNode.returnType = convertTypeToAST(returnType, checker, returnTypeLocation, visitedTypes);
+      functionTypeNode.returnType = convertTypeToAST(returnType, checker, returnTypeLocation, visitedTypes, logger);
       functionTypeNode.typeString = typeString;
       functionTypeNode.sourceLocation = currentLocation;
       return functionTypeNode;
     // Anonymous object type
     } else {
-      const properties = getPropertiesFromType(objectType, checker, currentLocation, visitedTypes);
+      const properties = getPropertiesFromType(objectType, checker, currentLocation, visitedTypes, logger);
 
       const objectTypeNode = typeAST as ObjectTypeNode;
       objectTypeNode.kind = 'object';
@@ -677,7 +680,7 @@ const convertTypeToAST = (
   if (type.symbol && (type.symbol.flags & ts.SymbolFlags.Interface)) {
     const interfaceType = type as ts.InterfaceType;
     const name = interfaceType.symbol.getName();
-    const properties = getPropertiesFromType(interfaceType, checker, currentLocation, visitedTypes);
+    const properties = getPropertiesFromType(interfaceType, checker, currentLocation, visitedTypes, logger);
 
     const interfaceTypeNode = typeAST as InterfaceTypeNode;
     interfaceTypeNode.kind = 'interface';
@@ -706,7 +709,7 @@ const convertTypeToAST = (
     // Convert types to TypeAST
     const args = unionType.types.map(type => {
       const typeLocation = getSourceLocationFromType(type) ?? currentLocation;
-      return convertTypeToAST(type, checker, typeLocation, visitedTypes);
+      return convertTypeToAST(type, checker, typeLocation, visitedTypes, logger);
     });
 
     // HACK: Typescript treats each value of an Enum type as a OR (Union) type.
@@ -762,7 +765,7 @@ const convertTypeToAST = (
 
     const args = intersectionType.types.map(type => {
       const typeLocation = getSourceLocationFromType(type) ?? currentLocation;
-      return convertTypeToAST(type, checker, typeLocation, visitedTypes);
+      return convertTypeToAST(type, checker, typeLocation, visitedTypes, logger);
     });
 
     const AndTypeNode = typeAST as AndTypeNode;
@@ -784,7 +787,7 @@ const convertTypeToAST = (
     const enumUnderlyingType = checker.getTypeAtLocation(enumDeclaration);
     const enumUnderlyingTypeLocation = getSourceLocationFromType(enumUnderlyingType) ?? currentLocation;
     const underlyingType = convertTypeToAST(
-      enumUnderlyingType, checker, enumUnderlyingTypeLocation, visitedTypes) as EnumTypeNode;
+      enumUnderlyingType, checker, enumUnderlyingTypeLocation, visitedTypes, logger) as EnumTypeNode;
 
     const enumValueNode = typeAST as EnumValueNode;
     enumValueNode.kind = 'enum-value';
@@ -813,8 +816,8 @@ const convertTypeToAST = (
  * @param sourceFilePaths Array of source code paths
  * @returns Array of extracted function information with complete AST data
  */
-export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths: string[]): FunctionInfo[] => {
-  console.log(`extractFunctions: tsConfig=${tsConfig ? 'provided' : 'null'}, baseDir=${baseDir}, sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
+export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths: string[], logger: Logger): FunctionInfo[] => {
+  logger.debug(`extractFunctions: tsConfig=${tsConfig ? 'provided' : 'null'}, baseDir=${baseDir}, sourceFilePaths=${JSON.stringify(sourceFilePaths)}`);
   
   // Parse tsconfig
   const parsedConfig = ts.parseJsonConfigFileContent(
@@ -822,11 +825,11 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
     ts.sys,
     baseDir
   );
-  console.log(`extractFunctions: parsed config, fileNames=${parsedConfig.fileNames.length}, options=${JSON.stringify(parsedConfig.options.target)}`);
+  logger.debug(`extractFunctions: parsed config, fileNames=${parsedConfig.fileNames.length}, options=${JSON.stringify(parsedConfig.options.target)}`);
 
   // Generate Program for entire project (including all files)
   const allFiles = [...new Set([...parsedConfig.fileNames, ...sourceFilePaths])];
-  console.log(`extractFunctions: creating program with ${allFiles.length} files`);
+  logger.debug(`extractFunctions: creating program with ${allFiles.length} files`);
   const program = ts.createProgram({
     rootNames: allFiles,
     options: parsedConfig.options,
@@ -838,10 +841,10 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
 
   // Process each file
   for (const sourceFilePath of sourceFilePaths) {
-    console.log(`extractFunctions: processing ${sourceFilePath}`);
+    logger.debug(`extractFunctions: processing ${sourceFilePath}`);
     const sourceFile = program.getSourceFile(sourceFilePath);
     if (!sourceFile) {
-      console.warn(`File not found: ${sourceFilePath}`);
+      logger.warn(`File not found: ${sourceFilePath}`);
       continue;
     }
 
@@ -852,15 +855,15 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
       // Handle class methods
       if (ts.isClassDeclaration(node) && node.name) {
         const declaredType = convertTypeToAST(
-          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes);
+          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes, logger);
         
         node.members.forEach(member => {
           if (ts.isMethodDeclaration(member) && member.name && ts.isIdentifier(member.name)) {
             const methodName = member.name.text;
-            const jsdocDecorator = extractJSDocDecorator(member);
+            const jsdocDecorator = extractJSDocDecorator(member, logger);
             
             const functionType = convertTypeToAST(
-              checker.getTypeAtLocation(member), checker, currentLocation, visitedTypes) as FunctionTypeNode;
+              checker.getTypeAtLocation(member), checker, currentLocation, visitedTypes, logger) as FunctionTypeNode;
 
             result.push({
               kind: 'class-method',
@@ -877,10 +880,10 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
       // Handle function declarations
       if (ts.isFunctionDeclaration(node) && node.name) {
         const functionName = node.name.text;
-        const jsdocDecorator = extractJSDocDecorator(node);
+        const jsdocDecorator = extractJSDocDecorator(node, logger);
 
         const functionType = convertTypeToAST(
-          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes) as FunctionTypeNode;
+          checker.getTypeAtLocation(node), checker, currentLocation, visitedTypes, logger) as FunctionTypeNode;
 
         result.push({
           kind: 'function',
@@ -899,11 +902,11 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
               declaration.initializer && ts.isArrowFunction(declaration.initializer)) {
             
             const functionName = declaration.name.text;
-            const jsdocDecorator = extractJSDocDecorator(node);
+            const jsdocDecorator = extractJSDocDecorator(node, logger);
             const arrowFunc = declaration.initializer;
 
             const functionType = convertTypeToAST(
-              checker.getTypeAtLocation(arrowFunc), checker, currentLocation, visitedTypes) as FunctionTypeNode;
+              checker.getTypeAtLocation(arrowFunc), checker, currentLocation, visitedTypes, logger) as FunctionTypeNode;
             
             result.push({
               kind: 'arrow-function',
@@ -930,25 +933,25 @@ export const extractFunctions = (tsConfig: any, baseDir: string, sourceFilePaths
  * @param tsConfig tsconfig.json file path or object. (default: search and read tsconfig.json file)
  * @returns TypeScript configuration object
  */
-export const loadTsConfig = (tsConfig: string | any | undefined, baseDir: string): any => {
-  console.log(`loadTsConfig: tsConfig=${typeof tsConfig}, baseDir=${baseDir}`);
+export const loadTsConfig = (tsConfig: string | any | undefined, baseDir: string, logger: Logger): any => {
+  logger.debug(`loadTsConfig: tsConfig=${typeof tsConfig}, baseDir=${baseDir}`);
   if (!tsConfig || typeof tsConfig === 'string') {
     const tsConfigPath = tsConfig ? resolve(baseDir, tsConfig) : baseDir;
-    console.log(`loadTsConfig: searching for tsconfig.json in ${tsConfigPath}`);
+    logger.debug(`loadTsConfig: searching for tsconfig.json in ${tsConfigPath}`);
     const configPath = ts.findConfigFile(tsConfigPath, ts.sys.fileExists, "tsconfig.json");
     if (!configPath) {
-      console.error(`loadTsConfig: tsconfig.json not found in ${tsConfigPath}`);
+      logger.error(`loadTsConfig: tsconfig.json not found in ${tsConfigPath}`);
       throw new Error(`tsconfig.json not found in ${tsConfigPath}`);
     }
-    console.log(`loadTsConfig: found tsconfig.json at ${configPath}`);
+    logger.debug(`loadTsConfig: found tsconfig.json at ${configPath}`);
     const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     if (!configFile.config) {
-      console.error(`loadTsConfig: Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
+      logger.error(`loadTsConfig: Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
       throw new Error(`Failed to load TypeScript configuration from ${configPath}: ${configFile.error}`);
     }
-    console.log(`loadTsConfig: successfully loaded tsconfig`);
+    logger.debug(`loadTsConfig: successfully loaded tsconfig`);
     return configFile.config;
   }
-  console.log(`loadTsConfig: using provided tsconfig object`);
+  logger.debug(`loadTsConfig: using provided tsconfig object`);
   return tsConfig;
 };
