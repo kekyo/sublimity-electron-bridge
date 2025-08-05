@@ -106,34 +106,70 @@ describe('SublimityElectronBridge Vite Plugin', () => {
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcMain } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { executeCommand, getVersion, queryDatabase } from '../test-fixtures/database';
 import { FileService } from '../test-fixtures/FileService';
 
 // Create singleton instances
 const __FileServiceInstance = new FileService();
 
-// Create RPC controller
-const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to preload process
-    global.mainWindow.webContents.send("rpc-message", message);
-  }
+// Store controllers for each window
+const controllers = new Map<number, SublimityRpcController>();
+
+// Setup RPC for each window
+const setupWindowRPC = (window: BrowserWindow) => {
+  const webContentsId = window.webContents.id;
+  
+  // Create RPC controller for this window
+  const controller = createSublimityRpcController({
+    onSendMessage: (message: SublimityRpcMessage) => {
+      // Send message to this specific window
+      if (!window.isDestroyed()) {
+        window.webContents.send("rpc-message", message);
+      }
+    }
+  });
+  
+  // Store controller
+  controllers.set(webContentsId, controller);
+  
+  // Register RPC functions
+  controller.register('databaseAPI:executeCommand', executeCommand);
+  controller.register('databaseAPI:queryDatabase', queryDatabase);
+  controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
+  controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
+  controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
+  controller.register('mainProcess:getVersion', getVersion);
+  
+  // Cleanup when window is closed
+  window.on("closed", () => {
+    controllers.delete(webContentsId);
+  });
+}
+
+// Setup existing windows
+app.on("ready", () => {
+  BrowserWindow.getAllWindows().forEach(setupWindowRPC);
+});
+
+// Setup new windows
+app.on("browser-window-created", (_, window) => {
+  setupWindowRPC(window);
 });
 
 // Handle messages from preload process
-ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
+ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+  const controller = controllers.get(event.sender.id);
+  if (controller) {
+    controller.insertMessage(message);
+  }
 });
 
-// Register RPC functions
-controller.register('databaseAPI:executeCommand', executeCommand);
-controller.register('databaseAPI:queryDatabase', queryDatabase);
-controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
-controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
-controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
-controller.register('mainProcess:getVersion', getVersion);
+// Legacy support: If global.mainWindow exists, set it up
+if (typeof global !== "undefined" && global.mainWindow) {
+  setupWindowRPC(global.mainWindow);
+}
 `;
 
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -254,34 +290,70 @@ export {}
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcMain } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { executeCommand, getVersion, queryDatabase } from '../test-fixtures/database';
 import { FileService } from '../test-fixtures/FileService';
 
 // Create singleton instances
 const __FileServiceInstance = new FileService();
 
-// Create RPC controller
-const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to preload process
-    global.mainWindow.webContents.send("rpc-message", message);
-  }
+// Store controllers for each window
+const controllers = new Map<number, SublimityRpcController>();
+
+// Setup RPC for each window
+const setupWindowRPC = (window: BrowserWindow) => {
+  const webContentsId = window.webContents.id;
+  
+  // Create RPC controller for this window
+  const controller = createSublimityRpcController({
+    onSendMessage: (message: SublimityRpcMessage) => {
+      // Send message to this specific window
+      if (!window.isDestroyed()) {
+        window.webContents.send("rpc-message", message);
+      }
+    }
+  });
+  
+  // Store controller
+  controllers.set(webContentsId, controller);
+  
+  // Register RPC functions
+  controller.register('databaseAPI:executeCommand', executeCommand);
+  controller.register('databaseAPI:queryDatabase', queryDatabase);
+  controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
+  controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
+  controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
+  controller.register('mainProcess:getVersion', getVersion);
+  
+  // Cleanup when window is closed
+  window.on("closed", () => {
+    controllers.delete(webContentsId);
+  });
+}
+
+// Setup existing windows
+app.on("ready", () => {
+  BrowserWindow.getAllWindows().forEach(setupWindowRPC);
+});
+
+// Setup new windows
+app.on("browser-window-created", (_, window) => {
+  setupWindowRPC(window);
 });
 
 // Handle messages from preload process
-ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
+ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+  const controller = controllers.get(event.sender.id);
+  if (controller) {
+    controller.insertMessage(message);
+  }
 });
 
-// Register RPC functions
-controller.register('databaseAPI:executeCommand', executeCommand);
-controller.register('databaseAPI:queryDatabase', queryDatabase);
-controller.register('fileAPI:readFile', __FileServiceInstance.readFile);
-controller.register('fileAPI:writeFile', __FileServiceInstance.writeFile);
-controller.register('fileService:deleteFile', __FileServiceInstance.deleteFile);
-controller.register('mainProcess:getVersion', getVersion);
+// Legacy support: If global.mainWindow exists, set it up
+if (typeof global !== "undefined" && global.mainWindow) {
+  setupWindowRPC(global.mainWindow);
+}
 `;
 
     expect(mainHandlers).toBe(expectedMainHandlers);

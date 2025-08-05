@@ -242,8 +242,8 @@ declare global {
     const typeDefs = readFileSync(typeDefsPath, 'utf-8');
 
     // Check that generated files contain expected imports and function calls
-    expect(mainHandlers).toContain('import { ipcMain } from \'electron\'');
-    expect(mainHandlers).toContain('import { createSublimityRpcController, SublimityRpcMessage } from \'sublimity-rpc\'');
+    expect(mainHandlers).toContain('import { app, BrowserWindow, ipcMain } from \'electron\'');
+    expect(mainHandlers).toContain('import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from \'sublimity-rpc\'');
     expect(mainHandlers).toContain('import { UserService } from \'../../UserService\'');
     expect(mainHandlers).toContain('import { getSystemInfo, getUptime } from \'../../system\'');
     expect(mainHandlers).toContain('controller.register(\'userAPI:getUser\'');
