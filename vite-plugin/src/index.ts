@@ -276,9 +276,10 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     name: 'sublimity-electron-bridge',
     apply: 'build',
     configResolved: async config => {
-      // Get base directory from Vite config
+      // Capture base directory from Vite config
       const baseDir = config?.root ?? _baseDir;
       _baseDir = baseDir;
+      // Capture logger from Vite config
       const logger = {
         debug: config?.logger?.info ?? config?.customLogger?.info ?? _logger.debug,
         info: config?.logger?.info ?? config?.customLogger?.info ?? _logger.info,
@@ -286,6 +287,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         error: config?.logger?.error ?? config?.customLogger?.error ?? _logger.error,
       };
       _logger = logger;
+      // Process all files
       const logPrefix = `seb-vite:configResolved:${_processingCount++}`;
       logger.info(`[${logPrefix}]: Start: baseDir=${baseDir ?? "(undefined)"}`);
       try {
@@ -299,6 +301,7 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
     buildStart: async () => {
       const baseDir = _baseDir;
       const logger = _logger;
+      // Process all files
       const logPrefix = `seb-vite:buildStart:${_processingCount++}`;
       logger.info(`[${logPrefix}]: Start: baseDir=${baseDir ?? "(undefined)"}`);
       try {

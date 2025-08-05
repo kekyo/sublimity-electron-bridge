@@ -860,12 +860,12 @@ export const createElectronBridgeGenerator =
    * @returns The exposed methods
    */
   const analyzeFiles = async (filePaths: string[]): Promise<FunctionInfo[]> => {
-    logger.info(`analyzeFiles: received ${filePaths.length} files`);
-    logger.info(`analyzeFiles: baseDir=${baseDir}, tsConfig=${typeof tsConfig}`);
+    logger.debug(`analyzeFiles: received ${filePaths.length} files`);
+    logger.debug(`analyzeFiles: baseDir=${baseDir}, tsConfig=${typeof tsConfig}`);
 
     // Load the TypeScript configuration object
     const tsConfigObj = loadTsConfig(tsConfig, baseDir!, logger);
-    logger.info(`analyzeFiles: loaded tsConfig: ${tsConfigObj ? 'success' : 'failed'}`);
+    logger.debug(`analyzeFiles: loaded tsConfig: ${tsConfigObj ? 'success' : 'failed'}`);
 
     // Filter out generated files
     const filteredFiles = filePaths.filter(filePath => 
@@ -875,7 +875,7 @@ export const createElectronBridgeGenerator =
         preloadHandlerFile,
         typeDefinitionsFile)
     );
-    logger.info(`analyzeFiles: filtered to ${filteredFiles.length} files`);
+    logger.debug(`analyzeFiles: filtered to ${filteredFiles.length} files`);
 
     if (filteredFiles.length === 0) {
       logger.warn(`analyzeFiles: no files to analyze after filtering`);
@@ -883,7 +883,7 @@ export const createElectronBridgeGenerator =
     }
 
     const result = extractExposedFunctionsFromExtractor(tsConfigObj, baseDir!, filteredFiles, logger);
-    logger.info(`analyzeFiles: extracted ${result.length} exposed functions`);
+    logger.debug(`analyzeFiles: extracted ${result.length} exposed functions`);
     return result;
   };
 
@@ -915,16 +915,21 @@ export const createElectronBridgeGenerator =
     ]);
 
     // Log the summary
-    if (results.some(result => result)) {
-      logger.info(`Generated files:`);
+    if (functions.length > 0) {
+      logger.info(`Found ${functions.length} exposed functions in ${namespaceGroups.size} namespaces`);
+    } else {
+      logger.info(`No exposed functions found.`);
+    }
+    const updateCount = results.filter(result => result).length;
+    if (updateCount > 0) {
+      logger.info(`Updated files:`);
       if (results[0]) logger.info(`  - ${mainFilePath}`);
       if (results[1]) logger.info(`  - ${preloadFilePath}`);
       if (results[2]) logger.info(`  - ${typeDefsFilePath}`);
-      logger.info(`  - Found ${functions.length} exposed functions in ${namespaceGroups.size} namespaces`);
     } else {
-      logger.info(`Could not found any exposed functions`);
+      logger.info(`Any files unchanged.`);
     }
-  }
+  };
 
   // Returns the generator
   return {
