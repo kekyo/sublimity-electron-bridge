@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import screwUp from 'screw-up';
 
 export default defineConfig({
+  logLevel: 'info',
   plugins: [
     screwUp({
       outputMetadataFile: true

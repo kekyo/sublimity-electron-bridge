@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import screwUp from 'screw-up';
 
 export default defineConfig({
+  logLevel: 'info',
   plugins: [
     dts({
       rollupTypes: true
