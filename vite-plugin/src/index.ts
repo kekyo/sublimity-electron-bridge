@@ -11,7 +11,7 @@ import { glob } from 'glob';
 import { createRequire } from 'module';
 import { createDeferred, Deferred, createAsyncLock } from 'async-primitives';
 import { join, resolve } from 'path';
-import { version } from './generated/packageMetadata';
+import { git_commit_hash, version } from './generated/packageMetadata';
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -158,7 +158,7 @@ const processBatchOnWorker = (logger: Logger, options: ElectronBridgeOptions, fi
 const processAllFilesCore = async (
   logger: Logger, baseDir: string, options: SublimityElectronBridgeVitePluginOptions): Promise<void> => {
 
-  logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${version}]`);
+  logger.info(`Start Sublimity Electron IPC bridge Vite plugin [${version}-${git_commit_hash}]`);
 
   try {
     // 1. Collect source files from directories

@@ -151,32 +151,68 @@ interface SystemInfo {
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcMain } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { getSystemInfo, getUptime } from '../../system';
 import { UserService } from '../../UserService';
 
 // Create singleton instances
 const __UserServiceInstance = new UserService();
 
-// Create RPC controller
-const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to preload process
-    global.mainWindow.webContents.send("rpc-message", message);
-  }
+// Store controllers for each window
+const controllers = new Map<number, SublimityRpcController>();
+
+// Setup RPC for each window
+const setupWindowRPC = (window: BrowserWindow) => {
+  const webContentsId = window.webContents.id;
+  
+  // Create RPC controller for this window
+  const controller = createSublimityRpcController({
+    onSendMessage: (message: SublimityRpcMessage) => {
+      // Send message to this specific window
+      if (!window.isDestroyed()) {
+        window.webContents.send("rpc-message", message);
+      }
+    }
+  });
+  
+  // Store controller
+  controllers.set(webContentsId, controller);
+  
+  // Register RPC functions
+  controller.register('mainProcess:getUptime', getUptime);
+  controller.register('systemAPI:getSystemInfo', getSystemInfo);
+  controller.register('userAPI:getUser', __UserServiceInstance.getUser);
+  controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+  
+  // Cleanup when window is closed
+  window.on("closed", () => {
+    controllers.delete(webContentsId);
+  });
+}
+
+// Setup existing windows
+app.on("ready", () => {
+  BrowserWindow.getAllWindows().forEach(setupWindowRPC);
+});
+
+// Setup new windows
+app.on("browser-window-created", (_, window) => {
+  setupWindowRPC(window);
 });
 
 // Handle messages from preload process
-ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
+ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+  const controller = controllers.get(event.sender.id);
+  if (controller) {
+    controller.insertMessage(message);
+  }
 });
 
-// Register RPC functions
-controller.register('mainProcess:getUptime', getUptime);
-controller.register('systemAPI:getSystemInfo', getSystemInfo);
-controller.register('userAPI:getUser', __UserServiceInstance.getUser);
-controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+// Legacy support: If global.mainWindow exists, set it up
+if (typeof global !== "undefined" && global.mainWindow) {
+  setupWindowRPC(global.mainWindow);
+}
 `;
 
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -285,32 +321,68 @@ export {}
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcMain } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { getSystemInfo, getUptime } from '../src/system';
 import { UserService } from '../src/UserService';
 
 // Create singleton instances
 const __UserServiceInstance = new UserService();
 
-// Create RPC controller
-const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to preload process
-    global.mainWindow.webContents.send("rpc-message", message);
-  }
+// Store controllers for each window
+const controllers = new Map<number, SublimityRpcController>();
+
+// Setup RPC for each window
+const setupWindowRPC = (window: BrowserWindow) => {
+  const webContentsId = window.webContents.id;
+  
+  // Create RPC controller for this window
+  const controller = createSublimityRpcController({
+    onSendMessage: (message: SublimityRpcMessage) => {
+      // Send message to this specific window
+      if (!window.isDestroyed()) {
+        window.webContents.send("rpc-message", message);
+      }
+    }
+  });
+  
+  // Store controller
+  controllers.set(webContentsId, controller);
+  
+  // Register RPC functions
+  controller.register('mainProcess:getUptime', getUptime);
+  controller.register('systemAPI:getSystemInfo', getSystemInfo);
+  controller.register('userAPI:getUser', __UserServiceInstance.getUser);
+  controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+  
+  // Cleanup when window is closed
+  window.on("closed", () => {
+    controllers.delete(webContentsId);
+  });
+}
+
+// Setup existing windows
+app.on("ready", () => {
+  BrowserWindow.getAllWindows().forEach(setupWindowRPC);
+});
+
+// Setup new windows
+app.on("browser-window-created", (_, window) => {
+  setupWindowRPC(window);
 });
 
 // Handle messages from preload process
-ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
+ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+  const controller = controllers.get(event.sender.id);
+  if (controller) {
+    controller.insertMessage(message);
+  }
 });
 
-// Register RPC functions
-controller.register('mainProcess:getUptime', getUptime);
-controller.register('systemAPI:getSystemInfo', getSystemInfo);
-controller.register('userAPI:getUser', __UserServiceInstance.getUser);
-controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+// Legacy support: If global.mainWindow exists, set it up
+if (typeof global !== "undefined" && global.mainWindow) {
+  setupWindowRPC(global.mainWindow);
+}
 `;
 
     expect(mainHandlers).toBe(expectedMainHandlers);
@@ -337,32 +409,68 @@ controller.register('userService:getCurrentUser', __UserServiceInstance.getCurre
     const expectedMainHandlers = `// This is auto-generated main process handler by sublimity-electron-bridge.
 // Do not edit manually this file.
 
-import { ipcMain } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import { createSublimityRpcController, SublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 import { getSystemInfo, getUptime } from '../../system';
 import { UserService } from '../../UserService';
 
 // Create singleton instances
 const __UserServiceInstance = new UserService();
 
-// Create RPC controller
-const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to preload process
-    global.mainWindow.webContents.send("rpc-message", message);
-  }
+// Store controllers for each window
+const controllers = new Map<number, SublimityRpcController>();
+
+// Setup RPC for each window
+const setupWindowRPC = (window: BrowserWindow) => {
+  const webContentsId = window.webContents.id;
+  
+  // Create RPC controller for this window
+  const controller = createSublimityRpcController({
+    onSendMessage: (message: SublimityRpcMessage) => {
+      // Send message to this specific window
+      if (!window.isDestroyed()) {
+        window.webContents.send("rpc-message", message);
+      }
+    }
+  });
+  
+  // Store controller
+  controllers.set(webContentsId, controller);
+  
+  // Register RPC functions
+  controller.register('customAPI:getUptime', getUptime);
+  controller.register('systemAPI:getSystemInfo', getSystemInfo);
+  controller.register('userAPI:getUser', __UserServiceInstance.getUser);
+  controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+  
+  // Cleanup when window is closed
+  window.on("closed", () => {
+    controllers.delete(webContentsId);
+  });
+}
+
+// Setup existing windows
+app.on("ready", () => {
+  BrowserWindow.getAllWindows().forEach(setupWindowRPC);
+});
+
+// Setup new windows
+app.on("browser-window-created", (_, window) => {
+  setupWindowRPC(window);
 });
 
 // Handle messages from preload process
-ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
+ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+  const controller = controllers.get(event.sender.id);
+  if (controller) {
+    controller.insertMessage(message);
+  }
 });
 
-// Register RPC functions
-controller.register('customAPI:getUptime', getUptime);
-controller.register('systemAPI:getSystemInfo', getSystemInfo);
-controller.register('userAPI:getUser', __UserServiceInstance.getUser);
-controller.register('userService:getCurrentUser', __UserServiceInstance.getCurrentUser);
+// Legacy support: If global.mainWindow exists, set it up
+if (typeof global !== "undefined" && global.mainWindow) {
+  setupWindowRPC(global.mainWindow);
+}
 `;
 
     expect(mainHandlers).toBe(expectedMainHandlers);
