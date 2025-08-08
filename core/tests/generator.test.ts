@@ -258,12 +258,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -337,20 +339,16 @@ export function getVersion(): Promise<string> {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 contextBridge.exposeInMainWorld('fileService', {
   readFile: (path: string) => controller.invoke<string>('fileService:readFile', path)
 });
@@ -524,12 +522,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -601,12 +601,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -622,20 +624,16 @@ if (typeof global !== "undefined" && global.mainWindow) {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 `);
 
       const typeDefContent = readFileSync(typeDefFile, 'utf8');
@@ -725,20 +723,16 @@ export class DatabaseService {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 contextBridge.exposeInMainWorld('dbAPI', {
   query: (sql: string) => controller.invoke<any[]>('dbAPI:query', sql)
 });
@@ -849,12 +843,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -990,12 +986,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -1014,20 +1012,16 @@ if (typeof global !== "undefined" && global.mainWindow) {
 import { contextBridge, ipcRenderer } from 'electron';
 import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 contextBridge.exposeInMainWorld('fileService', {
   readFile: (path: string) => controller.invoke<string>('fileService:readFile', path),
   writeFile: (path: string, content: string) => controller.invoke<void>('fileService:writeFile', path, content)
@@ -1766,12 +1760,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -1791,20 +1787,16 @@ import type { OrderRequest, OrderResult, PaymentInfo } from '../separate-types-b
 import type { Product, ProductSearchCriteria } from '../separate-types-base/src/services/ProductService';
 import type { User, UserCreateRequest } from '../separate-types-base/src/services/UserService';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 contextBridge.exposeInMainWorld('mainProcess', {
   processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke<OrderResult>('mainProcess:processOrder', order, payment)
 });
