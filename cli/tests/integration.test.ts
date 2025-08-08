@@ -28,7 +28,7 @@ describe('CLI Integration Tests with Build Verification', () => {
       },
       dependencies: {
         "electron": "^32.0.0",
-        "sublimity-rpc": "^0.2.1"
+        "sublimity-rpc": ">=0.3.0"
       },
       devDependencies: {
         "typescript": "^5.8.3",

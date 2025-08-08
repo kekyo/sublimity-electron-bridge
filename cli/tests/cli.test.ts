@@ -201,12 +201,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -230,20 +232,16 @@ import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc
 import type { SystemInfo } from '../../system';
 import type { User } from '../../UserService';
 
-// Create RPC controller
+// Create RPC controller with Synchronous RPC mode
 const controller = createSublimityRpcController({
-  onSendMessage: (message: SublimityRpcMessage) => {
-    // Send message to main process
-    ipcRenderer.send("rpc-message", message);
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    // Send message to main process and get response synchronously
+    const response = await ipcRenderer.invoke("rpc-message", message);
+    return response;
   }
 });
 
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to main process
+// Expose RPC functions to renderer process
 contextBridge.exposeInMainWorld('mainProcess', {
   getUptime: () => controller.invoke<number>('mainProcess:getUptime')
 });
@@ -371,12 +369,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
@@ -459,12 +459,14 @@ app.on("browser-window-created", (_, window) => {
   setupWindowRPC(window);
 });
 
-// Handle messages from preload process
-ipcMain.on("rpc-message", (event, message: SublimityRpcMessage) => {
+// Handle messages from preload process with Synchronous RPC mode
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
-    controller.insertMessage(message);
+    const response = await controller.insertMessageWaitable(message);
+    return response;
   }
+  throw new Error(\`Controller not found for webContents \${event.sender.id}\`);
 });
 
 // Legacy support: If global.mainWindow exists, set it up
