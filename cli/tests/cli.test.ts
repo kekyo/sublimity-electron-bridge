@@ -176,11 +176,6 @@ const setupWindowRPC = (window: BrowserWindow) => {
     }
   });
 
-  // Handle messages from preload process
-  ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-    controller.insertMessage(message);
-  });
-
   // Store controller
   controllers.set(webContentsId, controller);
 
@@ -207,7 +202,7 @@ app.on("browser-window-created", (_, window) => {
 });
 
 // Handle messages from preload process with Synchronous RPC mode
-ipcMain.handle("rpc-invoke", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
     const response = await controller.insertMessageWaitable(message);
@@ -241,7 +236,7 @@ import type { User } from '../../UserService';
 const controller = createSublimityRpcController({
   onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
     // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-invoke", message);
+    const response = await ipcRenderer.invoke("rpc-message", message);
     return response;
   }
 });
@@ -354,11 +349,6 @@ const setupWindowRPC = (window: BrowserWindow) => {
     }
   });
 
-  // Handle messages from preload process
-  ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-    controller.insertMessage(message);
-  });
-
   // Store controller
   controllers.set(webContentsId, controller);
 
@@ -385,7 +375,7 @@ app.on("browser-window-created", (_, window) => {
 });
 
 // Handle messages from preload process with Synchronous RPC mode
-ipcMain.handle("rpc-invoke", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
     const response = await controller.insertMessageWaitable(message);
@@ -449,11 +439,6 @@ const setupWindowRPC = (window: BrowserWindow) => {
     }
   });
 
-  // Handle messages from preload process
-  ipcMain.on("rpc-message", (_, message: SublimityRpcMessage) => {
-    controller.insertMessage(message);
-  });
-
   // Store controller
   controllers.set(webContentsId, controller);
 
@@ -480,7 +465,7 @@ app.on("browser-window-created", (_, window) => {
 });
 
 // Handle messages from preload process with Synchronous RPC mode
-ipcMain.handle("rpc-invoke", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+ipcMain.handle("rpc-message", async (event, message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
   const controller = controllers.get(event.sender.id);
   if (controller) {
     const response = await controller.insertMessageWaitable(message);

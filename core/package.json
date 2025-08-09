@@ -28,7 +28,7 @@
   },
   "peerDependencies": {
     "typescript": ">=5.0.0",
-    "sublimity-rpc": ">=0.3.0"
+    "sublimity-rpc": ">=1.1.0"
   },
   "devDependencies": {
     "@types/node": ">=24.0.10",
