@@ -435,6 +435,17 @@ const getSingletonInstanceDescriptorList = (namespaceGroups: Map<string, Functio
 };
 
 /**
+ * Check if a return type is AsyncGenerator
+ * @param returnType - The return type to check
+ * @returns Whether the return type is AsyncGenerator
+ */
+const isAsyncGenerator = (returnType: TypeAST): boolean => {
+  return returnType.kind === 'type-reference' &&
+    returnType.referencedType.kind === 'interface' &&
+    returnType.referencedType.name === 'AsyncGenerator';
+};
+
+/**
  * Registration descriptor
  * @remarks This is a descriptor for a single registration.
  */
@@ -448,6 +459,10 @@ interface RegistrationDescriptor {
    * @remarks This is the name of the function to register. Dot-separated member name when the function is declared with a type.
    */
   readonly functionName: string;
+  /**
+   * Whether this is a generator function
+   */
+  readonly isGenerator: boolean;
 }
 
 /**
@@ -461,18 +476,21 @@ const getRegistrationDescriptorList = (namespaceGroups: Map<string, FunctionInfo
   for (const [ipcNamespace, functions] of namespaceGroups.entries()) {
     for (const functionInfo of functions) {
       const declaredType = functionInfo.declaredType;
+      const isGenerator = isAsyncGenerator(functionInfo.type.returnType);
       if (declaredType) {
         // When the function is declared with a type, we need to register the function as a member of the singleton instance
         const singletonInstanceName = `__${declaredType.typeString}Instance`;
         registrationDescriptors.push({
           functionId: `${ipcNamespace}:${functionInfo.name}`,
-          functionName: `${singletonInstanceName}.${functionInfo.name}`
+          functionName: `${singletonInstanceName}.${functionInfo.name}`,
+          isGenerator
         });
       } else {
         // When the function is not declared with a type, we need to register the function as a standalone function
         registrationDescriptors.push({
           functionId: `${ipcNamespace}:${functionInfo.name}`,
-          functionName: functionInfo.name
+          functionName: functionInfo.name,
+          isGenerator
         });
       }
     }
@@ -511,7 +529,10 @@ const generateMainHandlers = (
   // Generate registrations
   const registrationDescriptors = getRegistrationDescriptorList(namespaceGroups); 
   const registrations = registrationDescriptors.map(
-    ({ functionId, functionName }) => `controller.register('${functionId}', ${functionName});`);
+    ({ functionId, functionName, isGenerator }) => 
+      isGenerator ? 
+        `controller.registerGenerator('${functionId}', ${functionName});` :
+        `controller.register('${functionId}', ${functionName});`);
 
   const mainBodyLines = [
     "// This is auto-generated main process handler by sublimity-electron-bridge.",
@@ -641,12 +662,22 @@ const generatePreloadBridge = (
       const params = `(${functionInfo.type.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ')})`;
       const functionId = `${ipcNamespace}:${functionInfo.name}`;
       const returnType = functionInfo.type.returnType;
-      const unwrappedReturnType = // Unwrap Promise<T> generic parameter
-        (returnType.kind === 'type-reference' &&
-         returnType.referencedType.kind === 'interface' &&
-         returnType.referencedType.name === 'Promise') ?
-          (returnType.typeArguments?.at(0) ?? returnType) : returnType;
-      return `  ${functionInfo.name}: ${params} => controller.invoke<${unwrappedReturnType.typeString}>('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
+      
+      // Check if it's an AsyncGenerator
+      if (isAsyncGenerator(returnType)) {
+        // For AsyncGenerator, use iterate and extract the yielded type
+        const yieldedType = (returnType.kind === 'type-reference' && returnType.typeArguments?.at(0)) || returnType;
+        const yieldedTypeString = (typeof yieldedType === 'object' && 'typeString' in yieldedType) ? yieldedType.typeString : 'any';
+        return `  ${functionInfo.name}: ${params} => controller.iterate<${yieldedTypeString}>('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
+      } else {
+        // For Promise and other types, use invoke
+        const unwrappedReturnType = // Unwrap Promise<T> generic parameter
+          (returnType.kind === 'type-reference' &&
+           returnType.referencedType.kind === 'interface' &&
+           returnType.referencedType.name === 'Promise') ?
+            (returnType.typeArguments?.at(0) ?? returnType) : returnType;
+        return `  ${functionInfo.name}: ${params} => controller.invoke<${unwrappedReturnType.typeString}>('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
+      }
     }).join(',\n');
     return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
   });
@@ -743,7 +774,21 @@ const generateTypeDefinitions = (
   const rendererTypeDeclarations = rendererTypeDescriptors.map(({ typeName, functions }) => {
     const functionsCode = functions.map(functionInfo => {
       const params = functionInfo.type.parameters.map(p => `${p.memberString}: ${p.type.typeString}`).join(', ');
-      return `  readonly ${functionInfo.name}: (${params}) => ${functionInfo.type.returnType.typeString};`;   // Functions in interface
+      const returnType = functionInfo.type.returnType;
+      
+      // For AsyncGenerator, normalize the type parameters to match sublimity-rpc expectations
+      let returnTypeString: string;
+      if (isAsyncGenerator(returnType)) {
+        // Extract the yielded type (first type argument)
+        const yieldedType = (returnType.kind === 'type-reference' && returnType.typeArguments?.at(0)) || returnType;
+        const yieldedTypeString = (typeof yieldedType === 'object' && 'typeString' in yieldedType) ? yieldedType.typeString : 'any';
+        // Generate AsyncGenerator with correct type parameters for sublimity-rpc
+        returnTypeString = `AsyncGenerator<${yieldedTypeString}, void, unknown>`;
+      } else {
+        returnTypeString = returnType.typeString;
+      }
+      
+      return `  readonly ${functionInfo.name}: (${params}) => ${returnTypeString};`;   // Functions in interface
     }).join('\n');
     return `export interface ${typeName} {\n${functionsCode}\n}`;
   });
