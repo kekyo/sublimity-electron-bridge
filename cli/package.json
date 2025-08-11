@@ -14,6 +14,7 @@
   "bin": {
     "seb": "dist/cli.js"
   },
+  "type": "module",
   "files": [
     "dist"
   ],

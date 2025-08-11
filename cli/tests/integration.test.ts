@@ -11,7 +11,7 @@ describe('CLI Integration Tests with Build Verification', () => {
   let testSourceDir: string;
 
   beforeEach(async fn => {
-     // Create unique temporary directory for each test
+    // Create unique temporary directory for each test
     testOutputDir = join(testOutputBaseDir, fn.task.name);
     mkdirSync(testOutputDir, { recursive: true });
     console.info(`Test output directory: ${testOutputDir}`);

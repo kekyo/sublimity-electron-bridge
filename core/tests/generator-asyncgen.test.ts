@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createElectronBridgeGenerator } from '../src/generator';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { createElectronBridgeGenerator } from '../src/generator';
 import { createConsoleLogger } from '../src/logger';
 
 describe('async generator support', () => {

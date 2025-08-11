@@ -15,10 +15,11 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'ElectronBridgeCore',
-      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'js'}`,
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
       formats: ['es', 'cjs']
     },
     target: 'node14',
+    sourcemap: true,
     rollupOptions: {
       external: ['typescript', 'path', 'fs', 'fs/promises', 'crypto']
     }

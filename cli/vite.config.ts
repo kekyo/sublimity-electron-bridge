@@ -16,10 +16,11 @@ export default defineConfig({
         cli: resolve(__dirname, 'src/cli.ts')
       },
       name: 'ElectronBridgeCLI',
-      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'js'}`,
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
       formats: ['es', 'cjs']
     },
     target: 'node14',
+    sourcemap: true,
     rollupOptions: {
       external: ['commander', 'glob', 'fs', 'fs/promises', 'path', 'typescript', 'crypto']
     }

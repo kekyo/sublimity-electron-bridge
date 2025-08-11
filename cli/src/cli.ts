@@ -8,7 +8,7 @@
 import { Command } from 'commander';
 import { createElectronBridgeGenerator, createConsoleLogger } from 'sublimity-electron-bridge-core';
 import { promises as fs } from 'fs';
-import { author, git_commit_hash, license, repository_url, version } from './generated/packageMetadata.ts';
+import { author, git_commit_hash, license, repository_url, version } from './generated/packageMetadata';
 
 // Create the program
 const program = new Command();
