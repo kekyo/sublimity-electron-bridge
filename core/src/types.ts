@@ -66,6 +66,11 @@ export interface ElectronBridgeOptions {
    */
   preloadHandlerFile?: string;
   /**
+   * The output file path for the renderer handlers
+   * @remarks Default: 'src/renderer/src/generated/seb_renderer.ts'
+   */
+  rendererHandlerFile?: string;
+  /**
    * The file name for the type definitions
    * @remarks Default: 'src/renderer/src/generated/seb_types.ts'
    */

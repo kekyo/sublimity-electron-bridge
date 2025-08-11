@@ -648,15 +648,53 @@ const generatePreloadBridge = (
   outputDir: string,
   baseDir: string | undefined): string => {
 
+
+  const preloadBodyLines = [
+    "// This is auto-generated preloader by sublimity-electron-bridge.",
+    "// Do not edit manually this file.",
+    '',
+    "import { contextBridge, ipcRenderer } from 'electron';",
+    "import { SublimityRpcMessage } from 'sublimity-rpc';",
+    '',
+    '// Expose RPC message bridge to renderer process',
+    'contextBridge.exposeInMainWorld("__sublimityBridge", {',
+    '  // Register listener for messages from main process',
+    '  onMessage: (callback: (message: SublimityRpcMessage) => void) => {',
+    '    ipcRenderer.on("rpc-message", (_, message) => callback(message));',
+    '  },',
+    '  // Send message to main process and get response synchronously',
+    '  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {',
+    '    return await ipcRenderer.invoke("rpc-message", message);',
+    '  }',
+    '});',
+    ''
+  ].filter(line => line !== null);
+
+  return preloadBodyLines.join('\n');
+};
+
+/**
+ * Generate the renderer bridge
+ * @param namespaceGroups - The grouped methods
+ * @param outputDir - The output directory
+ * @param baseDir - Base directory for resolving relative paths
+ * @returns The generated code
+ * @remarks This function generates the renderer bridge for the exposed methods.
+ */
+const generateRendererBridge = (
+  namespaceGroups: Map<string, FunctionInfo[]>,
+  outputDir: string,
+  baseDir: string | undefined): string => {
+
   // Generate import declarations
   const [_, importTypeDescriptors] = getImportDescriptorList(
     namespaceGroups, outputDir, baseDir, false, false);
   const importTypeDeclarations = importTypeDescriptors.map(
     ({ path, memberNames }) => `import type { ${memberNames.join(', ')} } from '${path}';`);
 
-  // Generate preload bridge declarations
-  const preloadBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
-  const preloadBridgeDeclarations = preloadBridgeDescriptors.map(({ ipcNamespace, functions }) => {
+  // Generate renderer bridge declarations
+  const rendererBridgeDescriptors = getPreloadBridgeDescriptorList(namespaceGroups);
+  const rendererBridgeDeclarations = rendererBridgeDescriptors.map(({ ipcNamespace, functions }) => {
     const functionsCode = functions.map(functionInfo => {
       const args = functionInfo.type.parameters.map(p => p.name).join(', ');
       const params = `(${functionInfo.type.parameters.map(p => `${p.name}: ${p.type.typeString}`).join(', ')})`;
@@ -679,37 +717,37 @@ const generatePreloadBridge = (
         return `  ${functionInfo.name}: ${params} => controller.invoke<${unwrappedReturnType.typeString}>('${functionId}'${functionInfo.type.parameters.length >= 1 ? `, ${args}` : ''})`;
       }
     }).join(',\n');
-    return `contextBridge.exposeInMainWorld('${ipcNamespace}', {\n${functionsCode}\n});`;
+    return `(window as any).${ipcNamespace} = {\n${functionsCode}\n};`;
   });
 
-  const preloadBodyLines = [
-    "// This is auto-generated preloader by sublimity-electron-bridge.",
+  const rendererBodyLines = [
+    "// This is auto-generated renderer bridge by sublimity-electron-bridge.",
     "// Do not edit manually this file.",
     '',
-    "import { contextBridge, ipcRenderer } from 'electron';",
     "import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';",
     ...importTypeDeclarations,
     '',
-    '// Create RPC controller with Synchronous RPC mode',
+    '// Get the bridge from preloader',
+    'const bridge = (window as any).__sublimityBridge;',
+    '',
+    '// Create RPC controller in renderer process',
     'const controller = createSublimityRpcController({',
     '  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {',
-    '    // Send message to main process and get response synchronously',
-    '    const response = await ipcRenderer.invoke("rpc-message", message);',
-    '    return response;',
+    '    return await bridge.sendMessage(message);',
     '  }',
     '});',
     '',
     '// Handle messages from main process',
-    'ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {',
+    'bridge.onMessage((message: SublimityRpcMessage) => {',
     '  controller.insertMessage(message);',
     '});',
     '',
-    '// Expose RPC functions to renderer process',
-    ...preloadBridgeDeclarations,
+    '// Expose RPC functions to window object',
+    ...rendererBridgeDeclarations,
     ''
   ].filter(line => line !== null);
 
-  return preloadBodyLines.join('\n');
+  return rendererBodyLines.join('\n');
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -893,10 +931,11 @@ const writeFileWhenChanged = async (filePath: string, content: string): Promise<
  * @param filePath - The path to the file
  * @param mainProcessHandlerFile - The main process handler file
  * @param preloadHandlerFile - The preload handler file
+ * @param rendererHandlerFile - The renderer handler file
  * @param typeDefinitionsFile - The type definitions file
  * @returns Whether the file is generated
  */
-const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, preloadHandlerFile?: string, typeDefinitionsFile?: string): boolean => {
+const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, preloadHandlerFile?: string, rendererHandlerFile?: string, typeDefinitionsFile?: string): boolean => {
   const normalizedPath = filePath.replace(/\\/g, '/');
 
   // Check if file is the main process handler file
@@ -907,6 +946,12 @@ const isGeneratedFile = (filePath: string, mainProcessHandlerFile?: string, prel
   // Check if file is the preload handler file
   if (preloadHandlerFile &&
     normalizedPath.includes(preloadHandlerFile.replace(/\\/g, '/'))) {
+    return true;
+  }
+
+  // Check if file is the renderer handler file
+  if (rendererHandlerFile &&
+    normalizedPath.includes(rendererHandlerFile.replace(/\\/g, '/'))) {
     return true;
   }
 
@@ -935,6 +980,7 @@ export const createElectronBridgeGenerator =
     defaultNamespace = 'mainProcess',
     mainProcessHandlerFile = 'src/main/generated/seb_main.ts',
     preloadHandlerFile = 'src/preload/generated/seb_preload.ts',
+    rendererHandlerFile = 'src/renderer/src/generated/seb_renderer.ts',
     typeDefinitionsFile = 'src/renderer/src/generated/seb_types.ts',
   } = options ?? { };
 
@@ -957,6 +1003,7 @@ export const createElectronBridgeGenerator =
         filePath,
         mainProcessHandlerFile,
         preloadHandlerFile,
+        rendererHandlerFile,
         typeDefinitionsFile)
     );
     logger.debug(`analyzeFiles: filtered to ${filteredFiles.length} files`);
@@ -987,6 +1034,10 @@ export const createElectronBridgeGenerator =
     const preloadFilePath = resolve(baseDir!, preloadHandlerFile);
     const preloadBridgeCode = generatePreloadBridge(namespaceGroups, dirname(preloadFilePath), baseDir);
 
+    // Generate renderer bridge
+    const rendererFilePath = resolve(baseDir!, rendererHandlerFile);
+    const rendererBridgeCode = generateRendererBridge(namespaceGroups, dirname(rendererFilePath), baseDir);
+
     // Generate type definitions
     const typeDefsFilePath = resolve(baseDir!, typeDefinitionsFile);
     const typeDefsCode = generateTypeDefinitions(namespaceGroups, dirname(typeDefsFilePath), baseDir);
@@ -995,6 +1046,7 @@ export const createElectronBridgeGenerator =
     const results = await Promise.all([
       writeFileWhenChanged(mainFilePath, mainHandlersCode),
       writeFileWhenChanged(preloadFilePath, preloadBridgeCode),
+      writeFileWhenChanged(rendererFilePath, rendererBridgeCode),
       writeFileWhenChanged(typeDefsFilePath, typeDefsCode)
     ]);
 
@@ -1009,7 +1061,8 @@ export const createElectronBridgeGenerator =
       logger.info(`Updated files:`);
       if (results[0]) logger.info(`  - ${mainFilePath}`);
       if (results[1]) logger.info(`  - ${preloadFilePath}`);
-      if (results[2]) logger.info(`  - ${typeDefsFilePath}`);
+      if (results[2]) logger.info(`  - ${rendererFilePath}`);
+      if (results[3]) logger.info(`  - ${typeDefsFilePath}`);
     } else {
       logger.info(`Any files unchanged.`);
     }

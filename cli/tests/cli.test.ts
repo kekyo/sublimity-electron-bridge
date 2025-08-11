@@ -228,36 +228,18 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
-import type { SystemInfo } from '../../system';
-import type { User } from '../../UserService';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('mainProcess', {
-  getUptime: () => controller.invoke<number>('mainProcess:getUptime')
-});
-contextBridge.exposeInMainWorld('systemAPI', {
-  getSystemInfo: () => controller.invoke<SystemInfo>('systemAPI:getSystemInfo')
-});
-contextBridge.exposeInMainWorld('userAPI', {
-  getUser: (id: number) => controller.invoke<User>('userAPI:getUser', id)
-});
-contextBridge.exposeInMainWorld('userService', {
-  getCurrentUser: () => controller.invoke<User | null>('userService:getCurrentUser')
 });
 `;
 
