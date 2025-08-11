@@ -250,9 +250,9 @@ declare global {
     expect(mainHandlers).toContain('controller.register(\'systemAPI:getSystemInfo\'');
 
     expect(preloadBridge).toContain('import { contextBridge, ipcRenderer } from \'electron\'');
-    expect(preloadBridge).toContain('import { createSublimityRpcController, SublimityRpcMessage } from \'sublimity-rpc\'');
-    expect(preloadBridge).toContain('contextBridge.exposeInMainWorld(\'userAPI\'');
-    expect(preloadBridge).toContain('contextBridge.exposeInMainWorld(\'systemAPI\'');
+    expect(preloadBridge).toContain('import { SublimityRpcMessage } from \'sublimity-rpc\'');
+    expect(preloadBridge).toContain('contextBridge.exposeInMainWorld("__sublimityBridge"');
+    expect(preloadBridge).toContain('onMessage: (callback: (message: SublimityRpcMessage) => void)');
 
     expect(typeDefs).toContain('import type { SystemInfo } from \'../../../system\'');
     expect(typeDefs).toContain('import type { User } from \'../../../UserService\'');

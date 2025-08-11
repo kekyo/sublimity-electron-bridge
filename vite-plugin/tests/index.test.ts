@@ -182,36 +182,18 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => controller.invoke<number>('databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => controller.invoke<any[]>('databaseAPI:queryDatabase', sql)
-});
-contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => controller.invoke<string>('fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => controller.invoke<void>('fileAPI:writeFile', path, content)
-});
-contextBridge.exposeInMainWorld('fileService', {
-  deleteFile: (path: string) => controller.invoke<boolean>('fileService:deleteFile', path)
-});
-contextBridge.exposeInMainWorld('mainProcess', {
-  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
 
@@ -369,36 +351,18 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('databaseAPI', {
-  executeCommand: (command: string) => controller.invoke<number>('databaseAPI:executeCommand', command),
-  queryDatabase: (sql: string) => controller.invoke<any[]>('databaseAPI:queryDatabase', sql)
-});
-contextBridge.exposeInMainWorld('fileAPI', {
-  readFile: (path: string) => controller.invoke<string>('fileAPI:readFile', path),
-  writeFile: (path: string, content: string) => controller.invoke<void>('fileAPI:writeFile', path, content)
-});
-contextBridge.exposeInMainWorld('fileService', {
-  deleteFile: (path: string) => controller.invoke<boolean>('fileService:deleteFile', path)
-});
-contextBridge.exposeInMainWorld('mainProcess', {
-  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
 

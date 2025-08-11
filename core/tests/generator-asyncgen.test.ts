@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createElectronBridgeGenerator } from '../src/generator';
@@ -82,6 +83,7 @@ export class DataService {
       tsConfig: 'tsconfig.json',
       mainProcessHandlerFile: 'main/handlers.ts',
       preloadHandlerFile: 'preload/bridge.ts',
+      rendererHandlerFile: 'renderer/bridge.ts',
       typeDefinitionsFile: 'types/api.d.ts'
     });
   });
@@ -128,7 +130,56 @@ export class DataService {
     expect(mainContent).toContain("controller.register('mainProcess:normalAsync', normalAsync);");
   });
 
-  it('should generate correct preload bridge with iterate', async () => {
+  it('should generate correct renderer bridge with iterate and invoke methods', async () => {
+    const functions = await generator.analyzeFiles([
+      join(testDir, 'src', 'generator-functions.ts')
+    ]);
+    
+    await generator.generateFiles(functions);
+    
+    // Read renderer file content
+    const rendererFile = join(testDir, 'renderer/bridge.ts');
+    const rendererContent = readFileSync(rendererFile, 'utf8');
+    
+    // Expected renderer content with proper structure for async generators
+    const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).dataService = {
+  streamRecords: (query: string) => controller.iterate<Record<string, any>>('dataService:streamRecords', query)
+};
+(window as any).dataStream = {
+  streamNumbers: (max: number) => controller.iterate<number>('dataStream:streamNumbers', max)
+};
+(window as any).mainProcess = {
+  normalAsync: (value: string) => controller.invoke<string>('mainProcess:normalAsync', value),
+  streamData: (count: number) => controller.iterate<string>('mainProcess:streamData', count)
+};
+`;
+    
+    // Content validation
+    expect(rendererContent).toBe(expectedRendererContent);
+  });
+
+  it('should generate correct preload bridge with simple format', async () => {
     const functions = await generator.analyzeFiles([
       join(testDir, 'src', 'generator-functions.ts')
     ]);
@@ -137,13 +188,20 @@ export class DataService {
     
     const preloadContent = await readFile(join(testDir, 'preload/bridge.ts'), 'utf-8');
     
-    // Check for iterate usage for async generators
-    expect(preloadContent).toContain("streamData: (count: number) => controller.iterate<string>('mainProcess:streamData', count)");
-    expect(preloadContent).toContain("streamNumbers: (max: number) => controller.iterate<number>('dataStream:streamNumbers', max)");
-    expect(preloadContent).toContain("streamRecords: (query: string) => controller.iterate<Record<string, any>>('dataService:streamRecords', query)");
+    // Check that the preload contains the simple bridge format
+    expect(preloadContent).toContain('// This is auto-generated preloader by sublimity-electron-bridge.');
+    expect(preloadContent).toContain('// Do not edit manually this file.');
+    expect(preloadContent).toContain("import { contextBridge, ipcRenderer } from 'electron';");
+    expect(preloadContent).toContain("import { SublimityRpcMessage } from 'sublimity-rpc';");
+    expect(preloadContent).toContain('contextBridge.exposeInMainWorld("__sublimityBridge", {');
+    expect(preloadContent).toContain('onMessage: (callback: (message: SublimityRpcMessage) => void) => {');
+    expect(preloadContent).toContain('ipcRenderer.on("rpc-message", (_, message) => callback(message));');
+    expect(preloadContent).toContain('sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {');
+    expect(preloadContent).toContain('return await ipcRenderer.invoke("rpc-message", message);');
     
-    // Check for invoke usage for normal async function
-    expect(preloadContent).toContain("normalAsync: (value: string) => controller.invoke<string>('mainProcess:normalAsync', value)");
+    // Ensure it does not contain the old controller format
+    expect(preloadContent).not.toContain('controller.iterate');
+    expect(preloadContent).not.toContain('controller.invoke');
   });
 
   it('should generate correct type definitions for async generators', async () => {

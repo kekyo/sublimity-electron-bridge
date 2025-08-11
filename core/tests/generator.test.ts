@@ -103,10 +103,11 @@ describe('generator function', () => {
   });
 
   describe('generateFiles', () => {
-    it('should generate all three output files', async () => {
+    it('should generate all four output files', async () => {
       const testBaseDir = join(testOutputDir, 'test-base');
       const mainFile = join(testOutputDir, 'main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'types', 'electron-api.d.ts');
 
       // Create test files
@@ -133,6 +134,7 @@ export class FileService {
         baseDir: testBaseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -148,6 +150,7 @@ export class FileService {
       // Check that all files are created
       expect(existsSync(mainFile)).toBe(true);
       expect(existsSync(preloadFile)).toBe(true);
+      expect(existsSync(rendererFile)).toBe(true);
       expect(existsSync(typeDefFile)).toBe(true);
     });
 
@@ -281,6 +284,7 @@ if (typeof global !== "undefined" && global.mainWindow) {
       const baseDir = join(testOutputDir, 'preload-bridge-test');
       const mainFile = join(testOutputDir, 'main-bridge', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-bridge', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-bridge', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'preload-bridge-types.d.ts');
 
       // Create test files
@@ -318,6 +322,7 @@ export function getVersion(): Promise<string> {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -337,38 +342,137 @@ export function getVersion(): Promise<string> {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('fileService', {
-  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path)
-});
-contextBridge.exposeInMainWorld('mainProcess', {
-  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
 
       expect(preloadContent).toBe(expectedPreloadContent);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).fileService = {
+  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path)
+};
+(window as any).mainProcess = {
+  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
+    });
+
+    it('should generate correct renderer bridge content', async () => {
+      const baseDir = join(testOutputDir, 'renderer-bridge-test');
+      const mainFile = join(testOutputDir, 'main-renderer', 'ipc-handlers.ts');
+      const preloadFile = join(testOutputDir, 'preload-renderer', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-only', 'renderer.ts');
+      const typeDefFile = join(testOutputDir, 'renderer-types.d.ts');
+
+      // Create test files
+      createTestFiles(baseDir, [
+        {
+          path: 'src/services/DataService.ts',
+          content: `
+/**
+ * @decorator expose
+ */
+export class DataService {
+  /**
+   * @decorator expose
+   */
+  fetchData(id: number): Promise<string> {
+    return Promise.resolve('data');
+  }
+}
+`
+        }
+      ]);
+
+      const generator = createElectronBridgeGenerator({
+        baseDir: baseDir,
+        mainProcessHandlerFile: mainFile,
+        preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
+        typeDefinitionsFile: typeDefFile,
+      });
+
+      const tsConfig = loadTsConfig(tsConfigFile, baseDir, logger);
+      const functions = extractFunctions(
+        tsConfig, baseDir,
+        [
+          join(baseDir, 'src/services/DataService.ts')
+        ], logger);
+
+      await generator.generateFiles(functions);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).dataService = {
+  fetchData: (id: number) => controller.invoke<string>('dataService:fetchData', id)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should generate correct type definitions content', async () => {
       const baseDir = join(testOutputDir, 'type-definitions-test');
       const mainFile = join(testOutputDir, 'main-types', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-types', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-types', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'electron-api.d.ts');
 
       // Create test files
@@ -402,6 +506,7 @@ export class FileService {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -434,12 +539,44 @@ export {}
 `;
 
       expect(typeContent).toBe(expectedTypeContent);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).fileService = {
+  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke<void>('fileService:writeFile', path, content)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should handle relative paths when baseDir is specified', async () => {
       const baseDir = join(testOutputDir, 'relative-test');
       const mainFile = join(testOutputDir, 'main-relative', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'preload-relative', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-relative', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'relative-types.d.ts');
 
       // Create test files in the base directory
@@ -463,6 +600,7 @@ export class FileService {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -542,17 +680,49 @@ if (typeof global !== "undefined" && global.mainWindow) {
   setupWindowRPC(global.mainWindow);
 }
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).fileService = {
+  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should handle empty methods array', async () => {
       const mainFile = join(testOutputDir, 'empty-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'empty-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-empty', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'empty-types.d.ts');
 
       const generator = createElectronBridgeGenerator({ 
         baseDir: testOutputDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
 
@@ -627,23 +797,19 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
 });
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
 `);
 
       const typeDefContent = readFileSync(typeDefFile, 'utf8');
@@ -657,12 +823,40 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should handle multiple namespaces correctly', async () => {
       const baseDir = join(testOutputDir, 'multi-namespace-test');
       const mainFile = join(testOutputDir, 'multi-namespace', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'multi-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-multi', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'multi-types.d.ts');
 
       // Create test files
@@ -710,6 +904,7 @@ export class DatabaseService {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -731,39 +926,63 @@ export class DatabaseService {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
+import { SublimityRpcMessage } from 'sublimity-rpc';
+
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
+  }
+});
+`);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
 import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
 const controller = createSublimityRpcController({
   onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+    return await bridge.sendMessage(message);
   }
 });
 
 // Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
+bridge.onMessage((message: SublimityRpcMessage) => {
   controller.insertMessage(message);
 });
 
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('dbAPI', {
+// Expose RPC functions to window object
+(window as any).dbAPI = {
   query: (sql: string) => controller.invoke<any[]>('dbAPI:query', sql)
-});
-contextBridge.exposeInMainWorld('fileAPI', {
+};
+(window as any).fileAPI = {
   readFile: (path: string) => controller.invoke<string>('fileAPI:readFile', path)
-});
-contextBridge.exposeInMainWorld('systemAPI', {
+};
+(window as any).systemAPI = {
   getVersion: () => controller.invoke<string>('systemAPI:getVersion')
-});
-`);
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should combine into one namespace when declared same class', async () => {
       const baseDir = join(testOutputDir, 'dedupe-test');
       const mainFile = join(testOutputDir, 'dedupe-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'dedupe-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-dedupe', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'dedupe-types.d.ts');
 
       // Create test files
@@ -794,6 +1013,7 @@ export class FileService {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
 
@@ -873,12 +1093,44 @@ if (typeof global !== "undefined" && global.mainWindow) {
   setupWindowRPC(global.mainWindow);
 }
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).fileService = {
+  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke<void>('fileService:writeFile', path, content)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should generate files with complex namespace combinations', async () => {
       const baseDir = join(testOutputDir, 'complex-test');
       const mainFile = join(testOutputDir, 'complex-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'complex-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-complex', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'complex-types.d.ts');
       
       // Create test files
@@ -931,6 +1183,7 @@ export async function formatDate(date: Date): Promise<string> {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile,
       });
       
@@ -1025,30 +1278,18 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('fileService', {
-  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path),
-  writeFile: (path: string, content: string) => controller.invoke<void>('fileService:writeFile', path, content)
-});
-contextBridge.exposeInMainWorld('mainProcess', {
-  formatDate: (date: Date) => controller.invoke<string>('mainProcess:formatDate', date),
-  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
 });
 `;
       
@@ -1079,6 +1320,41 @@ export {}
 `;
       
       expect(typeContent).toBe(expectedTypeContent);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).fileService = {
+  readFile: (path: string) => controller.invoke<string>('fileService:readFile', path),
+  writeFile: (path: string, content: string) => controller.invoke<void>('fileService:writeFile', path, content)
+};
+(window as any).mainProcess = {
+  formatDate: (date: Date) => controller.invoke<string>('mainProcess:formatDate', date),
+  getVersion: () => controller.invoke<string>('mainProcess:getVersion')
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
   });
 
@@ -1087,6 +1363,7 @@ export {}
       const baseDir = join(testOutputDir, 'import-test-base');
       const mainFile = join(testOutputDir, 'import-test-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'import-test-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-import-test', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'import-test-types.d.ts');
       
       // Create test files with type definitions
@@ -1151,6 +1428,7 @@ export function processOrder(order: Order, options: ProcessOptions): Promise<Ord
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
       
@@ -1189,12 +1467,49 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import type { CreateUserRequest, User } from '../import-test-base/src/services/UserService';
+import type { Order, OrderResult, ProcessOptions } from '../import-test-base/src/utils/orderProcessor';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).mainProcess = {
+  processOrder: (order: Order, options: ProcessOptions) => controller.invoke<OrderResult>('mainProcess:processOrder', order, options)
+};
+(window as any).userService = {
+  createUser: (userData: CreateUserRequest) => controller.invoke<User>('userService:createUser', userData),
+  getUser: (id: number) => controller.invoke<User>('userService:getUser', id)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should generate import statements for external package types', async () => {
       const baseDir = join(testOutputDir, 'external-import-base');
       const mainFile = join(testOutputDir, 'external-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'external-import-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-external-import', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'external-import-types.d.ts');
 
       // Create test files with TypeScript types
@@ -1275,6 +1590,7 @@ export function getNodeKind(node: Node): Promise<SyntaxKind> {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
 
@@ -1312,12 +1628,48 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import type { CompilerOptions, Node, Program, SourceFile, SyntaxKind } from 'typescript';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).mainProcess = {
+  getNodeKind: (node: Node) => controller.invoke<SyntaxKind>('mainProcess:getNodeKind', node)
+};
+(window as any).typeScriptService = {
+  analyzeFile: (filePath: string) => controller.invoke<SourceFile>('typeScriptService:analyzeFile', filePath),
+  createProgram: (rootNames: string[], options: CompilerOptions) => controller.invoke<Program>('typeScriptService:createProgram', rootNames, options)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should handle complex generic types with custom types', async () => {
       const baseDir = join(testOutputDir, 'generic-import-base');
       const mainFile = join(testOutputDir, 'generic-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'generic-import-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-generic-import', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'generic-import-types.d.ts');
       
       // Create test files with generic types
@@ -1383,6 +1735,7 @@ export function mapData(input: Filter<Item>): Promise<Item[]> {
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
       
@@ -1420,12 +1773,48 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import type { Filter, Item, Product, SearchResult } from '../generic-import-base/src/services/DataService';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).dataService = {
+  getItems: (filter: Filter<Item>) => controller.invoke<Item[]>('dataService:getItems', filter),
+  getResults: (query: string) => controller.invoke<SearchResult<Product>>('dataService:getResults', query)
+};
+(window as any).mainProcess = {
+  mapData: (input: Filter<Item>) => controller.invoke<Item[]>('mainProcess:mapData', input)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should not generate import statements for built-in types', async () => {
       const baseDir = join(testOutputDir, 'builtin-import-base');
       const mainFile = join(testOutputDir, 'builtin-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'builtin-import-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-builtin-import', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'builtin-import-types.d.ts');
       
       // Create test files with built-in types
@@ -1467,6 +1856,7 @@ export function processMap(data: Map<string, number>): Promise<Record<string, bo
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
       
@@ -1502,12 +1892,47 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).builtinService = {
+  processArray: (items: string[]) => controller.invoke<number>('builtinService:processArray', items),
+  processDate: (date: Date) => controller.invoke<string>('builtinService:processDate', date)
+};
+(window as any).mainProcess = {
+  processMap: (data: Map<string, number>) => controller.invoke<Record<string, boolean>>('mainProcess:processMap', data)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should handle mixed custom and built-in types correctly', async () => {
       const baseDir = join(testOutputDir, 'mixed-import-base');
       const mainFile = join(testOutputDir, 'mixed-import-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'mixed-import-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-mixed-import', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'mixed-import-types.d.ts');
       
       // Create test files with mixed custom and built-in types
@@ -1578,6 +2003,7 @@ export function validateConfig(config: AppConfig | string): Promise<ValidationRe
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
       
@@ -1617,12 +2043,50 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import type { ProcessedUser, User, UserMetadata, UserStatus } from '../mixed-import-base/src/services/MixedService';
+import type { AppConfig, ValidationResult } from '../mixed-import-base/src/utils/configValidator';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).mainProcess = {
+  validateConfig: (config: string | AppConfig) => controller.invoke<ValidationResult>('mainProcess:validateConfig', config)
+};
+(window as any).mixedService = {
+  activateUserData: (options: { name?: string | undefined; id: number; }) => controller.invoke<UserStatus.Active>('mixedService:activateUserData', options),
+  prepareUserData: (options: { name?: string | undefined; id: number; }) => controller.invoke<UserStatus>('mixedService:prepareUserData', options),
+  processUserData: (user: User | undefined, timestamp: Date, options: { name?: string | undefined; id: number; }, metadata: Record<string, UserMetadata>, args: any[]) => controller.invoke<ProcessedUser | UserStatus>('mixedService:processUserData', user, timestamp, options, metadata, args)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
 
     it('should generate import statements for types from separate definition files', async () => {
       const baseDir = join(testOutputDir, 'separate-types-base');
       const mainFile = join(testOutputDir, 'separate-types-main', 'ipc-handlers.ts');
       const preloadFile = join(testOutputDir, 'separate-types-preload', 'bridge.ts');
+      const rendererFile = join(testOutputDir, 'renderer-separate-types', 'renderer.ts');
       const typeDefFile = join(testOutputDir, 'separate-types.d.ts');
       
       // Create test files with types from separate definition files
@@ -1711,6 +2175,7 @@ export function processOrder(order: OrderRequest, payment: PaymentInfo): Promise
         baseDir: baseDir,
         mainProcessHandlerFile: mainFile,
         preloadHandlerFile: preloadFile,
+        rendererHandlerFile: rendererFile,
         typeDefinitionsFile: typeDefFile
       });
       
@@ -1802,34 +2267,18 @@ if (typeof global !== "undefined" && global.mainWindow) {
 // Do not edit manually this file.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
-import type { OrderRequest, OrderResult, PaymentInfo } from '../separate-types-base/src/processors/orderProcessor';
-import type { Product, ProductSearchCriteria } from '../separate-types-base/src/services/ProductService';
-import type { User, UserCreateRequest } from '../separate-types-base/src/services/UserService';
+import { SublimityRpcMessage } from 'sublimity-rpc';
 
-// Create RPC controller with Synchronous RPC mode
-const controller = createSublimityRpcController({
-  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
-    // Send message to main process and get response synchronously
-    const response = await ipcRenderer.invoke("rpc-message", message);
-    return response;
+// Expose RPC message bridge to renderer process
+contextBridge.exposeInMainWorld("__sublimityBridge", {
+  // Register listener for messages from main process
+  onMessage: (callback: (message: SublimityRpcMessage) => void) => {
+    ipcRenderer.on("rpc-message", (_, message) => callback(message));
+  },
+  // Send message to main process and get response synchronously
+  sendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await ipcRenderer.invoke("rpc-message", message);
   }
-});
-
-// Handle messages from main process
-ipcRenderer.on("rpc-message", (_, message: SublimityRpcMessage) => {
-  controller.insertMessage(message);
-});
-
-// Expose RPC functions to renderer process
-contextBridge.exposeInMainWorld('mainProcess', {
-  processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke<OrderResult>('mainProcess:processOrder', order, payment)
-});
-contextBridge.exposeInMainWorld('productService', {
-  findProduct: (criteria: ProductSearchCriteria) => controller.invoke<Product[]>('productService:findProduct', criteria)
-});
-contextBridge.exposeInMainWorld('userService', {
-  createUser: (userData: UserCreateRequest) => controller.invoke<User>('userService:createUser', userData)
 });
 `);
 
@@ -1862,6 +2311,45 @@ declare global {
 
 export {}
 `);
+
+      const rendererContent = readFileSync(rendererFile, 'utf8');
+
+      const expectedRendererContent = `// This is auto-generated renderer bridge by sublimity-electron-bridge.
+// Do not edit manually this file.
+
+import { createSublimityRpcController, SublimityRpcMessage } from 'sublimity-rpc';
+import type { OrderRequest, OrderResult, PaymentInfo } from '../separate-types-base/src/processors/orderProcessor';
+import type { Product, ProductSearchCriteria } from '../separate-types-base/src/services/ProductService';
+import type { User, UserCreateRequest } from '../separate-types-base/src/services/UserService';
+
+// Get the bridge from preloader
+const bridge = (window as any).__sublimityBridge;
+
+// Create RPC controller in renderer process
+const controller = createSublimityRpcController({
+  onSendMessage: async (message: SublimityRpcMessage): Promise<SublimityRpcMessage> => {
+    return await bridge.sendMessage(message);
+  }
+});
+
+// Handle messages from main process
+bridge.onMessage((message: SublimityRpcMessage) => {
+  controller.insertMessage(message);
+});
+
+// Expose RPC functions to window object
+(window as any).mainProcess = {
+  processOrder: (order: OrderRequest, payment: PaymentInfo) => controller.invoke<OrderResult>('mainProcess:processOrder', order, payment)
+};
+(window as any).productService = {
+  findProduct: (criteria: ProductSearchCriteria) => controller.invoke<Product[]>('productService:findProduct', criteria)
+};
+(window as any).userService = {
+  createUser: (userData: UserCreateRequest) => controller.invoke<User>('userService:createUser', userData)
+};
+`;
+
+      expect(rendererContent).toBe(expectedRendererContent);
     });
   });
 });
