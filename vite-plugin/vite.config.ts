@@ -19,10 +19,11 @@ export default defineConfig({
         worker: resolve(__dirname, 'src/worker.ts')
       },
       name: 'SublimityElectronBridgeVitePlugin',
-      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'js'}`,
+      fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
       formats: ['es', 'cjs']
     },
     target: 'node14',
+    sourcemap: true,
     rollupOptions: {
       external: ['vite', 'path', 'fs', 'fs/promises', 'typescript', 'crypto', 'worker_threads', 'glob', 'url', 'module', 'chokidar']
     }
