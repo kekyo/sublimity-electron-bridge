@@ -287,8 +287,18 @@ export const sublimityElectronBridge = (options: SublimityElectronBridgeVitePlug
         error: config?.logger?.error ?? config?.customLogger?.error ?? _logger.error,
       };
       _logger = logger;
-      // Process all files
       const logPrefix = `seb-vite:configResolved:${_processingCount++}`;
+
+      // Check if sublimity-rpc is installed
+      try {
+        const require = createRequire(import.meta.url);
+        require.resolve('sublimity-rpc');
+      } catch (error) {
+        logger.warn(`[${logPrefix}] sublimity-rpc is not installed.`);
+        logger.warn(`[${logPrefix}] Please install it manually: npm install sublimity-rpc`);
+        logger.warn(`[${logPrefix}] The generated code requires sublimity-rpc to function properly.`);
+      }
+      // Process all files
       logger.info(`[${logPrefix}]: Start: baseDir=${baseDir ?? "(undefined)"}`);
       try {
         if (baseDir) {
